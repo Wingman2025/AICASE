@@ -1,0 +1,28 @@
+# Entornos virtuales
+venv/
+new_venv/
+env/
+ENV/
+
+# Base de datos SQLite
+*.db
+
+# Archivos de caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Archivos de distribución
+dist/
+build/
+*.egg-info/
+
+# Archivos de configuración local
+.env
+.venv
+.idea/
+.vscode/
+
+# Logs
+*.log
