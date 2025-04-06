@@ -39,14 +39,14 @@ if RAILWAY_DEPLOYMENT and 'RAILWAY_STATIC_URL' in os.environ:
         pass  # Continue without whitenoise if not installed
 
 # Get chat components from the chatbot module
-chat_button, chat_modal, chat_store, font_awesome = chatbot.create_chat_components()
+chat_button, chat_modal, chat_store, font_awesome, custom_css = chatbot.create_chat_components()
 
 # Define the layout with a navigation bar, styled table, footer, and chat components
 app.layout = html.Div([
     # Navigation bar
     html.Div([
-        html.H1("Supply Chain Dashboard", style={'textAlign': 'center', 'color': '#4CAF50'}),
-        html.Hr(style={'border': '1px solid #4CAF50'}),
+        html.H1("Supply Chain Dashboard", style={'textAlign': 'center', 'color': '#007bff'}),
+        html.Hr(style={'border': '1px solid #007bff'}),
     ], style={'padding': '10px', 'backgroundColor': '#f9f9f9'}),
 
     # Tabs for navigation
@@ -59,7 +59,7 @@ app.layout = html.Div([
 
     # Footer
     html.Div([
-        html.Hr(style={'border': '1px solid #4CAF50'}),
+        html.Hr(style={'border': '1px solid #007bff'}),
         html.P(" 2025 Supply Chain Analytics | All Rights Reserved", style={'textAlign': 'center', 'color': '#888'}),
     ], style={'padding': '10px', 'backgroundColor': '#f9f9f9'}),
     
@@ -67,7 +67,8 @@ app.layout = html.Div([
     chat_button,
     chat_modal,
     chat_store,
-    font_awesome
+    font_awesome,
+    custom_css
 ])
 
 # Database connection function
