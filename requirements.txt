@@ -1,0 +1,15 @@
+# OpenAI Agents SDK
+openai-agents>=0.1.0
+
+# Dashboard components
+dash>=2.14.0
+dash-bootstrap-components>=1.5.0
+
+# Data handling
+pandas>=2.0.0
+
+# System dependencies
+python-dotenv>=1.0.0
+
+# Database
+sqlite3

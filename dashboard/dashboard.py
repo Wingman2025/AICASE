@@ -1,13 +1,27 @@
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
+import dash_bootstrap_components as dbc
 import sqlite3
+import sys
+import os
 
-# Initialize the Dash app
-app = dash.Dash(__name__)
+# Add the project root to the Python path
+dashboard_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(dashboard_dir)
+sys.path.append(project_root)
+
+# Import the chatbot module
+import chatbot
+
+# Initialize the Dash app with Bootstrap
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "Supply Chain Dashboard"
 
-# Define the layout with a navigation bar, styled table, and footer
+# Get chat components from the chatbot module
+chat_button, chat_modal, chat_store, font_awesome = chatbot.create_chat_components()
+
+# Define the layout with a navigation bar, styled table, footer, and chat components
 app.layout = html.Div([
     # Navigation bar
     html.Div([
@@ -27,7 +41,13 @@ app.layout = html.Div([
     html.Div([
         html.Hr(style={'border': '1px solid #4CAF50'}),
         html.P(" 2025 Supply Chain Analytics | All Rights Reserved", style={'textAlign': 'center', 'color': '#888'}),
-    ], style={'padding': '10px', 'backgroundColor': '#f9f9f9'})
+    ], style={'padding': '10px', 'backgroundColor': '#f9f9f9'}),
+    
+    # Chat components
+    chat_button,
+    chat_modal,
+    chat_store,
+    font_awesome
 ])
 
 # Database connection function
@@ -67,6 +87,9 @@ def render_content(tab):
             ])
     finally:
         conn.close()
+
+# Register the chatbot callbacks
+chatbot.register_callbacks(app)
 
 if __name__ == '__main__':
     app.run(debug=True)
