@@ -55,11 +55,21 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
         cursor = conn.cursor()
         
         if date:
-            if IS_RAILWAY:
-                query = "SELECT date, demand, inventory, production_plan FROM daily_data WHERE date = %s"
-            else:
-                query = "SELECT date, demand, inventory, production_plan FROM daily_data WHERE date = ?"
-            cursor.execute(query, (date,))
+            # Asegurarse de que la fecha esté en el formato correcto DD-MM-YYYY
+            try:
+                # Intentar parsear la fecha para validarla
+                date_obj = datetime.strptime(date, "%d-%m-%Y")
+                formatted_date = date_obj.strftime("%d-%m-%Y")
+                print(f"Buscando datos para la fecha: {formatted_date}")
+                
+                if IS_RAILWAY:
+                    query = "SELECT date, demand, inventory, production_plan FROM daily_data WHERE date = %s"
+                else:
+                    query = "SELECT date, demand, inventory, production_plan FROM daily_data WHERE date = ?"
+                cursor.execute(query, (formatted_date,))
+            except ValueError:
+                print(f"Formato de fecha inválido: {date}. Debe ser DD-MM-YYYY")
+                return []
         else:
             query = "SELECT date, demand, inventory, production_plan FROM daily_data ORDER BY date"
             cursor.execute(query)
@@ -67,8 +77,18 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
         columns = [column[0] for column in cursor.description]
         result = []
         
-        for row in cursor.fetchall():
+        rows = cursor.fetchall()
+        print(f"Filas encontradas: {len(rows)}")
+        
+        for row in rows:
             result.append(dict(zip(columns, row)))
+        
+        # Si no se encontraron resultados para una fecha específica, imprimir todas las fechas disponibles
+        if date and len(result) == 0:
+            print("No se encontraron datos para la fecha especificada. Verificando fechas disponibles...")
+            cursor.execute("SELECT date FROM daily_data ORDER BY date")
+            available_dates = [row[0] for row in cursor.fetchall()]
+            print(f"Fechas disponibles en la base de datos: {available_dates}")
         
         return result
     finally:
@@ -277,6 +297,7 @@ def generate_future_data(start_date: str, days: int) -> str:
     """
     try:
         # Parse start date
+        print(f"Generando datos desde {start_date} para {days} días")
         start_date_obj = datetime.strptime(start_date, "%d-%m-%Y")
         
         # Generate random data
@@ -289,6 +310,7 @@ def generate_future_data(start_date: str, days: int) -> str:
         
         # Format dates for database
         formatted_dates = [date.strftime("%d-%m-%Y") for date in dates]
+        print(f"Fechas generadas: {formatted_dates}")
         
         # Connect to database
         conn = get_connection()
@@ -312,27 +334,34 @@ def generate_future_data(start_date: str, days: int) -> str:
                 if IS_RAILWAY:
                     cursor.execute(
                         "UPDATE daily_data SET demand = %s, production_plan = %s, inventory = %s WHERE date = %s",
-                        (demand[i], production_plan[i], inventory[i], formatted_dates[i])
+                        (int(demand[i]), int(production_plan[i]), int(inventory[i]), formatted_dates[i])
                     )
                 else:
                     cursor.execute(
                         "UPDATE daily_data SET demand = ?, production_plan = ?, inventory = ? WHERE date = ?",
-                        (demand[i], production_plan[i], inventory[i], formatted_dates[i])
+                        (int(demand[i]), int(production_plan[i]), int(inventory[i]), formatted_dates[i])
                     )
                 updated_count += 1
+                print(f"Actualizado registro para {formatted_dates[i]}: demanda={int(demand[i])}, producción={int(production_plan[i])}, inventario={int(inventory[i])}")
             else:
                 # Insert new record
                 if IS_RAILWAY:
                     cursor.execute(
                         "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (%s, %s, %s, %s)",
-                        (formatted_dates[i], demand[i], production_plan[i], inventory[i])
+                        (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
                     )
                 else:
                     cursor.execute(
                         "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (?, ?, ?, ?)",
-                        (formatted_dates[i], demand[i], production_plan[i], inventory[i])
+                        (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
                     )
                 inserted_count += 1
+                print(f"Insertado nuevo registro para {formatted_dates[i]}: demanda={int(demand[i])}, producción={int(production_plan[i])}, inventario={int(inventory[i])}")
+        
+        # Verificar que los datos se hayan guardado correctamente
+        cursor.execute("SELECT date, demand FROM daily_data WHERE date = ?", (formatted_dates[0],))
+        first_record = cursor.fetchone()
+        print(f"Verificación del primer registro: {first_record}")
         
         conn.commit()
         conn.close()
@@ -340,4 +369,5 @@ def generate_future_data(start_date: str, days: int) -> str:
         return f"Successfully generated data for {days} days starting from {start_date}. Inserted {inserted_count} new records and updated {updated_count} existing records."
     
     except Exception as e:
+        print(f"Error en generate_future_data: {str(e)}")
         return f"Error generating future data: {str(e)}"

@@ -15,6 +15,16 @@ def get_daily_data(date: str = None):
     """
     Get daily supply chain data from the database.
     """
+    # Asegurarse de que la fecha esté en formato DD-MM-YYYY
+    if date and "-" in date:
+        # Si la fecha está en formato YYYY-MM-DD, convertirla a DD-MM-YYYY
+        try:
+            parts = date.split("-")
+            if len(parts) == 3 and len(parts[0]) == 4:  # Formato YYYY-MM-DD
+                date = f"{parts[2]}-{parts[1]}-{parts[0]}"
+        except Exception:
+            pass  # Si hay algún error, usar la fecha tal como está
+    
     return db_utils.get_daily_data(date)
 
 @function_tool
@@ -39,6 +49,13 @@ def get_demand_summary():
     return db_utils.get_demand_summary()
 
 @function_tool
+def update_demand(date: str, demand: int):
+    """
+    Update the demand for a specific date.
+    """
+    return db_utils.update_demand(date, demand)
+
+@function_tool
 def get_inventory_summary():
     """
     Get a summary of inventory data.
@@ -52,7 +69,7 @@ def generate_future_data(start_date: str, days: int):
     """
     return db_utils.generate_future_data(start_date, days)
 
-# Create specialist agents without using ConversationMemory
+# Create specialist agents
 production_planner = Agent(
     name="production_planner",
     instructions="""
@@ -62,6 +79,9 @@ production_planner = Agent(
       2. Updating production plans when requested.
       3. Providing summaries and insights about production patterns.
     Always explain your reasoning and be concise.
+    
+    IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+    and maintain context throughout the conversation.
     """,
     model="gpt-4o",
     tools=[get_daily_data, update_production_plan, get_production_summary, get_inventory_summary]
@@ -76,9 +96,12 @@ demand_planner = Agent(
       2. Providing summaries and insights about demand patterns.
       3. Analyzing the relationship between demand and inventory.
     Always explain your reasoning and be concise.
+    
+    IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+    and maintain context throughout the conversation.
     """,
     model="gpt-4o",
-    tools=[get_daily_data, get_demand_summary, get_inventory_summary]
+    tools=[get_daily_data, update_demand, get_demand_summary, get_inventory_summary]
 )
 
 data_generator = Agent(
@@ -94,6 +117,9 @@ data_generator = Agent(
       - Use the DD-MM-YYYY format for dates (e.g., "18-04-2025").
       - Explain what data was generated and how it can be used.
     Be concise and helpful.
+    
+    IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+    and maintain context throughout the conversation.
     """,
     model="gpt-4o",
     tools=[generate_future_data, get_daily_data]
@@ -107,6 +133,9 @@ triage_agent = Agent(
     - Route to demand_planner for questions about demand analysis.
     - Route to data_generator for requests to generate new data.
     If the question involves multiple areas, choose the most relevant specialist.
+    
+    IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+    and maintain context throughout the conversation.
     """,
     handoffs=[production_planner, demand_planner, data_generator]
 )
