@@ -2,8 +2,9 @@ import os
 import sqlite3
 import pandas as pd
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
+import numpy as np
 
 # Cargar variables de entorno
 load_dotenv()
@@ -262,3 +263,81 @@ def get_inventory_summary():
         }
     finally:
         conn.close()
+
+def generate_future_data(start_date: str, days: int) -> str:
+    """
+    Generate random data for future dates and save to database.
+    
+    Args:
+        start_date: Start date in DD-MM-YYYY format
+        days: Number of days to generate data for
+        
+    Returns:
+        Success or error message
+    """
+    try:
+        # Parse start date
+        start_date_obj = datetime.strptime(start_date, "%d-%m-%Y")
+        
+        # Generate random data
+        dates = [start_date_obj + timedelta(days=i) for i in range(days)]
+        demand = np.random.randint(50, 150, size=days)
+        production_plan = np.random.randint(50, 150, size=days)
+        
+        # Calculate inventory as production_plan - demand
+        inventory = [production_plan[i] - demand[i] for i in range(days)]
+        
+        # Format dates for database
+        formatted_dates = [date.strftime("%d-%m-%Y") for date in dates]
+        
+        # Connect to database
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Insert data for each date
+        inserted_count = 0
+        updated_count = 0
+        
+        for i in range(days):
+            # Check if date already exists
+            if IS_RAILWAY:
+                cursor.execute("SELECT COUNT(*) FROM daily_data WHERE date = %s", (formatted_dates[i],))
+            else:
+                cursor.execute("SELECT COUNT(*) FROM daily_data WHERE date = ?", (formatted_dates[i],))
+                
+            exists = cursor.fetchone()[0] > 0
+            
+            if exists:
+                # Update existing record
+                if IS_RAILWAY:
+                    cursor.execute(
+                        "UPDATE daily_data SET demand = %s, production_plan = %s, inventory = %s WHERE date = %s",
+                        (demand[i], production_plan[i], inventory[i], formatted_dates[i])
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE daily_data SET demand = ?, production_plan = ?, inventory = ? WHERE date = ?",
+                        (demand[i], production_plan[i], inventory[i], formatted_dates[i])
+                    )
+                updated_count += 1
+            else:
+                # Insert new record
+                if IS_RAILWAY:
+                    cursor.execute(
+                        "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (%s, %s, %s, %s)",
+                        (formatted_dates[i], demand[i], production_plan[i], inventory[i])
+                    )
+                else:
+                    cursor.execute(
+                        "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (?, ?, ?, ?)",
+                        (formatted_dates[i], demand[i], production_plan[i], inventory[i])
+                    )
+                inserted_count += 1
+        
+        conn.commit()
+        conn.close()
+        
+        return f"Successfully generated data for {days} days starting from {start_date}. Inserted {inserted_count} new records and updated {updated_count} existing records."
+    
+    except Exception as e:
+        return f"Error generating future data: {str(e)}"

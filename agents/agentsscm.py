@@ -1,4 +1,4 @@
-from agents import Agent, Runner, function_tool
+from agents import Agent, Runner, function_tool, ConversationMemory
 import sys
 import os
 
@@ -67,28 +67,51 @@ def get_inventory_summary():
     """
     return db_utils.get_inventory_summary()
 
+@function_tool
+def generate_future_data(start_date: str, days: int):
+    """
+    Generate random data for future dates and save to database.
+    
+    Args:
+        start_date: Start date in DD-MM-YYYY format (e.g., "18-04-2025")
+        days: Number of days to generate data for
+        
+    Returns:
+        Success or error message
+    """
+    return db_utils.generate_future_data(start_date, days)
+
+# Create shared memory objects for each agent
+production_memory = ConversationMemory()
+demand_memory = ConversationMemory()
+data_generator_memory = ConversationMemory()
+triage_memory = ConversationMemory()
+
 # Create the production planner agent with the database tools
 production_planner = Agent(
     name="production_planner",
     instructions="""
-    You are a production planning assistant. You help users understand and modify the production plan.
-    Use the provided tools to:
-    1. Get daily data to understand the current production plan
-    2. Update the production plan when requested
-    3. Provide summaries and insights about production
+    You are a production planning specialist for a supply chain management system.
     
-    Always explain your reasoning and provide context for your recommendations but be concise.
+    Your responsibilities include:
+    1. Get daily data to understand the current production plan
+    2. Update production plans when requested
+    3. Provide summaries and insights about production patterns
+    
+    Always explain your reasoning and provide context for your insights but be concise
     """,
     model="gpt-4o",
-    tools=[get_daily_data, update_production_plan, get_production_summary, get_inventory_summary]
+    tools=[get_daily_data, update_production_plan, get_production_summary, get_inventory_summary],
+    memory=production_memory
 )
 
 # Create the demand planner agent with the database tools
 demand_planner = Agent(
     name="demand_planner",
     instructions="""
-    You are a demand planning assistant. You help users understand demand patterns and trends.
-    Use the provided tools to:
+    You are a demand planning specialist for a supply chain management system.
+    
+    Your responsibilities include:
     1. Get daily data to understand the current demand
     2. Provide summaries and insights about demand patterns
     3. Analyze the relationship between demand and inventory
@@ -96,7 +119,31 @@ demand_planner = Agent(
     Always explain your reasoning and provide context for your insights but be concise
     """,
     model="gpt-4o",
-    tools=[get_daily_data, get_demand_summary, get_inventory_summary]
+    tools=[get_daily_data, get_demand_summary, get_inventory_summary],
+    memory=demand_memory
+)
+
+# Create a data generator agent
+data_generator = Agent(
+    name="data_generator",
+    instructions="""
+    You are a data generation specialist for a supply chain management system.
+    
+    Your responsibilities include:
+    1. Generate random but realistic data for future dates
+    2. Ensure data consistency and integrity
+    3. Help users understand the generated data
+    
+    When asked to generate data:
+    - Always confirm the start date and number of days
+    - Use the DD-MM-YYYY format for dates (e.g., "18-04-2025")
+    - Explain what data was generated and how it can be used
+    
+    Always be concise and helpful in your responses.
+    """,
+    model="gpt-4o",
+    tools=[generate_future_data, get_daily_data],
+    memory=data_generator_memory
 )
 
 # Create the triage agent that routes to the appropriate specialist
@@ -111,9 +158,13 @@ triage_agent = Agent(
     - Route to the demand_planner for questions about demand patterns, 
       forecasts, or demand analysis.
       
-    If the question involves both areas, choose the most relevant specialist.
+    - Route to the data_generator for requests to generate new data,
+      create future data points, or simulate supply chain scenarios.
+      
+    If the question involves multiple areas, choose the most relevant specialist.
     """,
-    handoffs=[production_planner, demand_planner]
+    handoffs=[production_planner, demand_planner, data_generator],
+    memory=triage_memory
 )
 
 async def main():
