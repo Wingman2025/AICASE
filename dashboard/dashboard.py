@@ -6,6 +6,16 @@ import sqlite3
 import sys
 import os
 
+# Try to import Railway-specific packages, but continue if not available
+try:
+    import dj_database_url
+    from dotenv import load_dotenv
+    # Load environment variables from .env file if it exists
+    load_dotenv()
+    RAILWAY_DEPLOYMENT = True
+except ImportError:
+    RAILWAY_DEPLOYMENT = False
+
 # Add the project root to the Python path
 dashboard_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(dashboard_dir)
@@ -17,6 +27,16 @@ import chatbot
 # Initialize the Dash app with Bootstrap
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "Supply Chain Dashboard"
+server = app.server  # Expose Flask server for Gunicorn
+
+# Configure static file serving for production
+if RAILWAY_DEPLOYMENT and 'RAILWAY_STATIC_URL' in os.environ:
+    try:
+        from whitenoise import WhiteNoise
+        server.wsgi_app = WhiteNoise(server.wsgi_app)
+        server.wsgi_app.add_files(os.path.join(project_root, 'assets'), prefix='assets/')
+    except ImportError:
+        pass  # Continue without whitenoise if not installed
 
 # Get chat components from the chatbot module
 chat_button, chat_modal, chat_store, font_awesome = chatbot.create_chat_components()
@@ -52,7 +72,24 @@ app.layout = html.Div([
 
 # Database connection function
 def get_db_connection():
-    import os
+    # Check if we have Railway deployment and DATABASE_URL environment variable
+    if RAILWAY_DEPLOYMENT and os.getenv('DATABASE_URL'):
+        try:
+            # Parse the DATABASE_URL and return a PostgreSQL connection
+            db_config = dj_database_url.parse(os.getenv('DATABASE_URL'))
+            import psycopg2
+            return psycopg2.connect(
+                host=db_config['HOST'],
+                database=db_config['NAME'],
+                user=db_config['USER'],
+                password=db_config['PASSWORD'],
+                port=db_config['PORT']
+            )
+        except (ImportError, Exception):
+            # Fall back to SQLite if there's any issue with PostgreSQL
+            pass
+    
+    # Default SQLite connection for local development
     # Get the directory of the current script
     script_dir = os.path.dirname(os.path.abspath(__file__))
     # Go up one level to the project root, then to the data directory
@@ -92,4 +129,5 @@ def render_content(tab):
 chatbot.register_callbacks(app)
 
 if __name__ == '__main__':
+    # Use standard configuration for local development
     app.run(debug=True)

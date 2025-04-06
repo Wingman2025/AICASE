@@ -1,15 +1,24 @@
 # OpenAI Agents SDK
-openai-agents>=0.1.0
+openai-agents==0.1.0
+openai==1.12.0
 
 # Dashboard components
-dash>=2.14.0
-dash-bootstrap-components>=1.5.0
+dash==2.14.2
+dash-bootstrap-components==1.5.0
+plotly==5.18.0
 
 # Data handling
-pandas>=2.0.0
+pandas==2.1.4
+numpy==1.26.3
 
 # System dependencies
-python-dotenv>=1.0.0
+python-dotenv==1.0.0
+gunicorn==21.2.0  # For production WSGI HTTP server
 
 # Database
-sqlite3
+# sqlite3 is part of the Python standard library
+
+# For Railway deployment
+psycopg2-binary==2.9.9  # PostgreSQL adapter (Railway often uses PostgreSQL)
+dj-database-url==2.1.0  # For database URL parsing
+whitenoise==6.6.0  # For serving static files
