@@ -2,24 +2,46 @@ import os
 import sqlite3
 import pandas as pd
 from typing import List, Dict, Any, Optional
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
+
+# Verificar si estamos en Railway (tiene DATABASE_URL configurado)
+IS_RAILWAY = os.getenv("DATABASE_URL") is not None
 
 def get_db_path():
-    """Get the absolute path to the database file."""
-    # Get the directory of this script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Path to the data directory
-    data_dir = os.path.join(script_dir, 'data')
-    # Path to the database file
-    return os.path.join(data_dir, 'supply_chain.db')
+    """
+    Get the path to the SQLite database file.
+    Only used in local development with SQLite.
+    """
+    if IS_RAILWAY:
+        return None  # No se usa en Railway
+        
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(current_dir, "data", "supply_chain.db")
+    return db_path
 
 def get_connection():
-    """Create and return a connection to the database."""
-    db_path = get_db_path()
-    return sqlite3.connect(db_path)
+    """
+    Get a connection to the database.
+    Returns SQLite connection locally and PostgreSQL connection on Railway.
+    """
+    if IS_RAILWAY:
+        # Importar psycopg2 solo si estamos en Railway
+        import psycopg2
+        
+        db_url = os.getenv("DATABASE_URL")
+        return psycopg2.connect(db_url)
+    else:
+        db_path = get_db_path()
+        print(f"Using database at: {db_path}")
+        return sqlite3.connect(db_path)
 
 def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Get daily data from the database.
+    Get daily supply chain data from the database.
     
     Args:
         date: Optional date string in DD-MM-YYYY format. If provided, only data for that date is returned.
@@ -30,18 +52,21 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
     conn = get_connection()
     try:
         cursor = conn.cursor()
+        
         if date:
-            cursor.execute("SELECT * FROM daily_data WHERE date = ?", (date,))
+            if IS_RAILWAY:
+                query = "SELECT date, demand, inventory, production_plan FROM daily_data WHERE date = %s"
+            else:
+                query = "SELECT date, demand, inventory, production_plan FROM daily_data WHERE date = ?"
+            cursor.execute(query, (date,))
         else:
-            cursor.execute("SELECT * FROM daily_data")
-        
-        # Get column names
-        columns = [desc[0] for desc in cursor.description]
-        
-        # Fetch all rows and convert to list of dictionaries
-        rows = cursor.fetchall()
+            query = "SELECT date, demand, inventory, production_plan FROM daily_data ORDER BY date"
+            cursor.execute(query)
+            
+        columns = [column[0] for column in cursor.description]
         result = []
-        for row in rows:
+        
+        for row in cursor.fetchall():
             result.append(dict(zip(columns, row)))
         
         return result
@@ -50,7 +75,7 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
 
 def update_production_plan(date: str, production_plan: int) -> str:
     """
-    Update the production plan for a specific date.
+    Update the production plan for a specific date and recalculate inventory.
     
     Args:
         date: Date string in DD-MM-YYYY format.
@@ -62,19 +87,99 @@ def update_production_plan(date: str, production_plan: int) -> str:
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE daily_data SET production_plan = ? WHERE date = ?", 
-                      (production_plan, date))
+        
+        # First, get the current demand for this date
+        if IS_RAILWAY:
+            cursor.execute("SELECT demand FROM daily_data WHERE date = %s", (date,))
+        else:
+            cursor.execute("SELECT demand FROM daily_data WHERE date = ?", (date,))
+        
+        result = cursor.fetchone()
+        
+        if result is None:
+            return f"No record found for date {date}."
+            
+        demand = result[0]
+        
+        # Calculate new inventory value
+        new_inventory = production_plan - demand
+        
+        # Update both production_plan and inventory
+        if IS_RAILWAY:
+            cursor.execute(
+                "UPDATE daily_data SET production_plan = %s, inventory = %s WHERE date = %s", 
+                (production_plan, new_inventory, date)
+            )
+        else:
+            cursor.execute(
+                "UPDATE daily_data SET production_plan = ?, inventory = ? WHERE date = ?", 
+                (production_plan, new_inventory, date)
+            )
+        
         conn.commit()
         
         if cursor.rowcount == 0:
             return f"No record found for date {date}."
-        return f"Production plan for {date} updated successfully to {production_plan}."
+        return f"Production plan for {date} updated successfully to {production_plan}. Inventory recalculated to {new_inventory}."
     except Exception as e:
         return f"Error updating record: {str(e)}"
     finally:
         conn.close()
 
-def get_production_summary() -> Dict[str, Any]:
+def update_demand(date: str, demand: int) -> str:
+    """
+    Update the demand for a specific date and recalculate inventory.
+    
+    Args:
+        date: Date string in DD-MM-YYYY format.
+        demand: New demand value.
+        
+    Returns:
+        Success or error message.
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        
+        # First, get the current production_plan for this date
+        if IS_RAILWAY:
+            cursor.execute("SELECT production_plan FROM daily_data WHERE date = %s", (date,))
+        else:
+            cursor.execute("SELECT production_plan FROM daily_data WHERE date = ?", (date,))
+        
+        result = cursor.fetchone()
+        
+        if result is None:
+            return f"No record found for date {date}."
+            
+        production_plan = result[0]
+        
+        # Calculate new inventory value
+        new_inventory = production_plan - demand
+        
+        # Update both demand and inventory
+        if IS_RAILWAY:
+            cursor.execute(
+                "UPDATE daily_data SET demand = %s, inventory = %s WHERE date = %s", 
+                (demand, new_inventory, date)
+            )
+        else:
+            cursor.execute(
+                "UPDATE daily_data SET demand = ?, inventory = ? WHERE date = ?", 
+                (demand, new_inventory, date)
+            )
+        
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return f"No record found for date {date}."
+        return f"Demand for {date} updated successfully to {demand}. Inventory recalculated to {new_inventory}."
+    except Exception as e:
+        return f"Error updating record: {str(e)}"
+    finally:
+        conn.close()
+
+def get_production_summary():
     """
     Get a summary of production data.
     
@@ -84,26 +189,25 @@ def get_production_summary() -> Dict[str, Any]:
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT 
-                AVG(production_plan) as avg_production,
-                MAX(production_plan) as max_production,
-                MIN(production_plan) as min_production,
-                SUM(production_plan) as total_production
-            FROM daily_data
-        """)
         
-        row = cursor.fetchone()
+        # Get total, average, min, and max production plan
+        if IS_RAILWAY:
+            cursor.execute("SELECT SUM(production_plan), AVG(production_plan), MIN(production_plan), MAX(production_plan) FROM daily_data")
+        else:
+            cursor.execute("SELECT SUM(production_plan), AVG(production_plan), MIN(production_plan), MAX(production_plan) FROM daily_data")
+        
+        total, avg, min_val, max_val = cursor.fetchone()
+        
         return {
-            "average_production": row[0],
-            "maximum_production": row[1],
-            "minimum_production": row[2],
-            "total_production": row[3]
+            "total_production": total,
+            "average_production": round(avg, 2) if avg else 0,
+            "min_production": min_val,
+            "max_production": max_val
         }
     finally:
         conn.close()
 
-def get_demand_summary() -> Dict[str, Any]:
+def get_demand_summary():
     """
     Get a summary of demand data.
     
@@ -113,26 +217,25 @@ def get_demand_summary() -> Dict[str, Any]:
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT 
-                AVG(demand) as avg_demand,
-                MAX(demand) as max_demand,
-                MIN(demand) as min_demand,
-                SUM(demand) as total_demand
-            FROM daily_data
-        """)
         
-        row = cursor.fetchone()
+        # Get total, average, min, and max demand
+        if IS_RAILWAY:
+            cursor.execute("SELECT SUM(demand), AVG(demand), MIN(demand), MAX(demand) FROM daily_data")
+        else:
+            cursor.execute("SELECT SUM(demand), AVG(demand), MIN(demand), MAX(demand) FROM daily_data")
+        
+        total, avg, min_val, max_val = cursor.fetchone()
+        
         return {
-            "average_demand": row[0],
-            "maximum_demand": row[1],
-            "minimum_demand": row[2],
-            "total_demand": row[3]
+            "total_demand": total,
+            "average_demand": round(avg, 2) if avg else 0,
+            "min_demand": min_val,
+            "max_demand": max_val
         }
     finally:
         conn.close()
 
-def get_inventory_summary() -> Dict[str, Any]:
+def get_inventory_summary():
     """
     Get a summary of inventory data.
     
@@ -142,19 +245,20 @@ def get_inventory_summary() -> Dict[str, Any]:
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT 
-                AVG(inventory) as avg_inventory,
-                MAX(inventory) as max_inventory,
-                MIN(inventory) as min_inventory
-            FROM daily_data
-        """)
         
-        row = cursor.fetchone()
+        # Get total, average, min, and max inventory
+        if IS_RAILWAY:
+            cursor.execute("SELECT SUM(inventory), AVG(inventory), MIN(inventory), MAX(inventory) FROM daily_data")
+        else:
+            cursor.execute("SELECT SUM(inventory), AVG(inventory), MIN(inventory), MAX(inventory) FROM daily_data")
+        
+        total, avg, min_val, max_val = cursor.fetchone()
+        
         return {
-            "average_inventory": row[0],
-            "maximum_inventory": row[1],
-            "minimum_inventory": row[2]
+            "total_inventory": total,
+            "average_inventory": round(avg, 2) if avg else 0,
+            "min_inventory": min_val,
+            "max_inventory": max_val
         }
     finally:
         conn.close()
