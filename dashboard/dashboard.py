@@ -337,8 +337,8 @@ app.layout = html.Div([
     session_store,
     font_awesome,
     
-    # Hidden div to store user data
-    html.Div(id="user-store", style={"display": "none"}),
+    # Hidden store to store user data
+    dcc.Store(id="user-store", data={}),
     
     # Hidden div to store session data (ya incluido en chat_components)
     # html.Div(id="session-store", style={"display": "none"}),
