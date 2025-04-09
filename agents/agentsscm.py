@@ -248,8 +248,9 @@ async def main():
         # Guardar el mensaje del usuario en la base de datos
         db_utils.save_message(session_id, "user", user_input)
 
-        # Pass the entire conversation history to the agent.
-        result = await Runner.run(triage_agent, input=conversation_history)
+        # Convertir el historial de conversación al formato esperado por el agente
+        messages_for_agent = [{"role": msg["role"], "content": msg["content"]} for msg in conversation_history]
+        result = await Runner.run(triage_agent, input=messages_for_agent)
 
         # Append the agent's response to the conversation history.
         conversation_history.append({"role": "assistant", "content": result.final_output})
