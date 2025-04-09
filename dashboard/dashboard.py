@@ -97,7 +97,7 @@ def migrate_users_table_if_needed():
         traceback.print_exc()
 
 # Initialize the Dash app with Bootstrap
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 app.title = "Supply Chain Dashboard"
 server = app.server  # Expose Flask server for Gunicorn
 
