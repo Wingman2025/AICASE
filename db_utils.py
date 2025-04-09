@@ -65,7 +65,12 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
             try:
                 # Intentar parsear la fecha para validarla
                 date_obj = datetime.strptime(date, "%d-%m-%Y")
-                formatted_date = date_obj.strftime("%d-%m-%Y")
+                if IS_RAILWAY:
+                    # PostgreSQL espera el formato YYYY-MM-DD
+                    formatted_date = date_obj.strftime("%Y-%m-%d")
+                else:
+                    # SQLite puede manejar el formato DD-MM-YYYY
+                    formatted_date = date_obj.strftime("%d-%m-%Y")
                 print(f"Buscando datos para la fecha: {formatted_date}")
                 
                 if IS_RAILWAY:
@@ -315,7 +320,12 @@ def generate_future_data(start_date: str, days: int) -> str:
         inventory = [production_plan[i] - demand[i] for i in range(days)]
         
         # Format dates for database
-        formatted_dates = [date.strftime("%d-%m-%Y") for date in dates]
+        if IS_RAILWAY:
+            # PostgreSQL espera el formato YYYY-MM-DD
+            formatted_dates = [date.strftime("%Y-%m-%d") for date in dates]
+        else:
+            # SQLite puede manejar el formato DD-MM-YYYY
+            formatted_dates = [date.strftime("%d-%m-%Y") for date in dates]
         print(f"Fechas generadas: {formatted_dates}")
         
         # Connect to database
