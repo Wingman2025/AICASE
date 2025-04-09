@@ -359,7 +359,11 @@ def generate_future_data(start_date: str, days: int) -> str:
                 print(f"Insertado nuevo registro para {formatted_dates[i]}: demanda={int(demand[i])}, producción={int(production_plan[i])}, inventario={int(inventory[i])}")
         
         # Verificar que los datos se hayan guardado correctamente
-        cursor.execute("SELECT date, demand FROM daily_data WHERE date = ?", (formatted_dates[0],))
+        if IS_RAILWAY:
+            cursor.execute("SELECT date, demand FROM daily_data WHERE date = %s", (formatted_dates[0],))
+        else:
+            cursor.execute("SELECT date, demand FROM daily_data WHERE date = ?", (formatted_dates[0],))
+        
         first_record = cursor.fetchone()
         print(f"Verificación del primer registro: {first_record}")
         
