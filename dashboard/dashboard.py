@@ -334,12 +334,16 @@ app.layout = html.Div([
     chat_button,
     chat_modal,
     chat_store,
+    session_store,
     font_awesome,
     
     # Hidden div to store user data
     html.Div(id="user-store", style={"display": "none"}),
     
     # Hidden div to store session data (ya incluido en chat_components)
+    # html.Div(id="session-store", style={"display": "none"}),
+    
+    # Hidden div to store session data
     # html.Div(id="session-store", style={"display": "none"}),
 ])
 
