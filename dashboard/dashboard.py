@@ -74,9 +74,19 @@ if RAILWAY_DEPLOYMENT and 'RAILWAY_STATIC_URL' in os.environ:
     try:
         from whitenoise import WhiteNoise
         server.wsgi_app = WhiteNoise(server.wsgi_app)
-        server.wsgi_app.add_files(os.path.join(project_root, 'assets'), prefix='assets/')
-    except ImportError:
-        pass  # Continue without whitenoise if not installed
+        # Verificar si el directorio de assets existe antes de añadirlo
+        assets_path = os.path.join(project_root, 'assets')
+        if os.path.exists(assets_path):
+            server.wsgi_app.add_files(assets_path, prefix='assets/')
+        else:
+            print(f"Directorio de assets no encontrado en: {assets_path}")
+            # Crear el directorio de assets si no existe
+            os.makedirs(assets_path, exist_ok=True)
+            print(f"Directorio de assets creado en: {assets_path}")
+    except ImportError as e:
+        print(f"Error al importar WhiteNoise: {str(e)}")
+    except Exception as e:
+        print(f"Error al configurar WhiteNoise: {str(e)}")
 
 # Get chat components from the chatbot module
 chat_button, chat_modal, chat_store, session_store, font_awesome = chatbot.create_chat_components()
@@ -256,14 +266,13 @@ app.layout = html.Div([
     chat_button,
     chat_modal,
     chat_store,
-    session_store,
     font_awesome,
     
     # Hidden div to store user data
     html.Div(id="user-store", style={"display": "none"}),
     
-    # Hidden div to store session data
-    html.Div(id="session-store", style={"display": "none"}),
+    # Hidden div to store session data (ya incluido en chat_components)
+    # html.Div(id="session-store", style={"display": "none"}),
 ])
 
 # Database connection function
