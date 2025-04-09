@@ -402,3 +402,119 @@ def delete_all_data() -> str:
     except Exception as e:
         print(f"Error al eliminar los datos: {str(e)}")
         return f"Error al eliminar los datos: {str(e)}"
+
+def create_conversation_history_table():
+    """
+    Crea la tabla para almacenar el historial de conversaciones si no existe.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if IS_RAILWAY:
+        # PostgreSQL
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS conversation_history (
+            id SERIAL PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+    else:
+        # SQLite
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS conversation_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+    
+    conn.commit()
+    conn.close()
+    
+def save_message(session_id, role, content):
+    """
+    Guarda un mensaje en el historial de conversaciones.
+    
+    Args:
+        session_id: Identificador único de la sesión
+        role: Rol del mensaje ('user' o 'assistant')
+        content: Contenido del mensaje
+        
+    Returns:
+        ID del mensaje guardado
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if IS_RAILWAY:
+        # PostgreSQL
+        cursor.execute(
+            "INSERT INTO conversation_history (session_id, role, content) VALUES (%s, %s, %s) RETURNING id",
+            (session_id, role, content)
+        )
+        message_id = cursor.fetchone()[0]
+    else:
+        # SQLite
+        cursor.execute(
+            "INSERT INTO conversation_history (session_id, role, content) VALUES (?, ?, ?)",
+            (session_id, role, content)
+        )
+        message_id = cursor.lastrowid
+    
+    conn.commit()
+    conn.close()
+    
+    return message_id
+
+def get_conversation_history(session_id):
+    """
+    Recupera el historial de conversación para una sesión específica.
+    
+    Args:
+        session_id: Identificador único de la sesión
+        
+    Returns:
+        Lista de diccionarios con los mensajes de la conversación
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "SELECT role, content FROM conversation_history WHERE session_id = ? ORDER BY id ASC",
+        (session_id,)
+    )
+    
+    # Convertir los resultados a una lista de diccionarios
+    history = [{"role": row[0], "content": row[1]} for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    return history
+
+def clear_conversation_history(session_id):
+    """
+    Elimina el historial de conversación para una sesión específica.
+    
+    Args:
+        session_id: Identificador único de la sesión
+        
+    Returns:
+        Mensaje indicando el éxito o error de la operación
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "DELETE FROM conversation_history WHERE session_id = ?",
+        (session_id,)
+    )
+    
+    conn.commit()
+    conn.close()
+    
+    return f"Historial de conversación eliminado para la sesión {session_id}"

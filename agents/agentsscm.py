@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import os
+import uuid
 
 # Add the parent directory to the Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -215,24 +216,46 @@ triage_agent = Agent(
 )
 
 async def main():
-    # Initialize an empty conversation history as a list of messages.
-    conversation_history = []
+    # Crear la tabla de historial de conversaciones si no existe
+    db_utils.create_conversation_history_table()
+    
+    # Generar un ID de sesión único para esta conversación
+    session_id = str(uuid.uuid4())
+    print(f"ID de sesión: {session_id}")
+    
+    # Recuperar el historial de conversación existente o inicializar uno vacío
+    conversation_history = db_utils.get_conversation_history(session_id)
+    
     print("Hi! I am your supply chain assistant. Type 'exit' to quit.")
+    print("Type 'clear history' to borrar el historial de esta sesión.")
     
     while True:
         user_input = input("You: ")
         if user_input.lower() in ['exit', 'bye', 'quit']:
             print("Goodbye!")
             break
+            
+        if user_input.lower() == 'clear history':
+            # Limpiar el historial de conversación
+            db_utils.clear_conversation_history(session_id)
+            conversation_history = []
+            print("Historial de conversación eliminado.")
+            continue
 
         # Append the user's message to the conversation history.
         conversation_history.append({"role": "user", "content": user_input})
+        
+        # Guardar el mensaje del usuario en la base de datos
+        db_utils.save_message(session_id, "user", user_input)
 
         # Pass the entire conversation history to the agent.
         result = await Runner.run(triage_agent, input=conversation_history)
 
         # Append the agent's response to the conversation history.
         conversation_history.append({"role": "assistant", "content": result.final_output})
+        
+        # Guardar la respuesta del asistente en la base de datos
+        db_utils.save_message(session_id, "assistant", result.final_output)
 
         print("Assistant:", result.final_output)
 

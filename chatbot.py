@@ -6,6 +6,7 @@ from datetime import datetime
 import sys
 import os
 import re
+import uuid
 
 # Add the project root to the Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,8 +16,13 @@ sys.path.insert(0, agents_dir)
 # Import the modules using the correct path
 import agentsscm
 from agentsscm import triage_agent, Runner
+import db_utils
 
-# Create the chat components that will be imported into the dashboard
+# Estilos globales que pueden ser modificados desde el dashboard
+USER_MESSAGE_STYLE = {}
+ASSISTANT_MESSAGE_STYLE = {}
+TIMESTAMP_STYLE = {}
+
 def create_chat_components():
     """Create and return the chat button, modal, and store components."""
     
@@ -49,128 +55,139 @@ def create_chat_components():
         "marginTop": "3px"
     }
     
-    # Chat button that will trigger the chat modal
-    chat_button = html.Div([
-        dbc.Button(
-            html.I(className="fas fa-robot", style={"fontSize": "1.5rem"}),
-            id="open-chat-button",
-            color="primary",
-            className="position-fixed",
-            style={
-                "bottom": "20px",
-                "right": "20px",
-                "zIndex": "1000",
-                "borderRadius": "50%",
-                "width": "60px",
-                "height": "60px",
-                "display": "flex",
-                "justifyContent": "center",
-                "alignItems": "center",
-                "boxShadow": "0 4px 12px rgba(0,0,0,0.3)",
-                "transition": "all 0.3s ease",
-            },
-        ),
-    ])
-
-    # Chat modal component - now with improved styling
-    chat_modal = html.Div(
-        [
-            html.Div([
-                # Header
-                html.Div([
-                    html.Div([
-                        html.I(className="fas fa-robot me-2", style={"fontSize": "1.2rem"}),
-                        html.H5("Supply Chain Assistant", className="m-0 fw-bold"),
-                    ], className="d-flex align-items-center"),
-                    html.Button(
-                        "×",
-                        id="close-chat",
-                        className="btn-close btn-close-white",
-                        style={"fontSize": "1.5rem"}
-                    ),
-                ], className="d-flex justify-content-between align-items-center p-3 bg-primary text-white rounded-top"),
-                
-                # Chat history display
-                html.Div(id="chat-history", className="p-3", 
-                        style={
-                            "height": "350px", 
-                            "overflowY": "auto",
-                            "backgroundColor": "#f8f9fa",
-                            "borderLeft": "1px solid #dee2e6",
-                            "borderRight": "1px solid #dee2e6",
-                        }),
-                
-                # Input area
-                html.Div([
-                    dbc.InputGroup([
-                        dbc.Input(
-                            id="user-input", 
-                            placeholder="Escribe tu pregunta aquí...", 
-                            type="text",
-                            className="border-primary",
-                            style={
-                                "borderRadius": "20px 0 0 20px",
-                                "padding": "10px 15px",
-                                "fontSize": "0.95rem"
-                            }
-                        ),
-                        dbc.Button(
-                            html.I(className="fas fa-paper-plane"), 
-                            id="send-button", 
-                            color="primary", 
-                            style={
-                                "borderRadius": "0 20px 20px 0",
-                                "padding": "10px 15px"
-                            }
-                        ),
-                    ]),
-                    
-                    # Loading indicator
-                    dcc.Loading(
-                        id="loading",
-                        type="circle",
-                        color="#007bff",
-                        children=html.Div(id="loading-output")
-                    ),
-                ], className="p-3 bg-white rounded-bottom border-bottom border-left border-right"),
-            ], 
-            className="rounded shadow",
-            style={
-                "position": "fixed",
-                "bottom": "90px",
-                "right": "20px",
-                "width": "350px",
-                "maxWidth": "90vw",
-                "zIndex": "1000",
-                "display": "none",  # Initially hidden
-                "transition": "all 0.3s ease",
-                "overflow": "hidden",
-                "border": "1px solid #dee2e6",
-            },
-            id="chat-modal"
-            ),
-        ],
-    )
-
-    # Store component for chat history
-    chat_store = dcc.Store(id="conversation-store", data={"messages": []})
-    
-    # Font Awesome for icons - updated to newer version
-    font_awesome = html.Link(
-        rel="stylesheet",
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-    )
-    
-    # Define global styles
+    # Set global styles
     global USER_MESSAGE_STYLE, ASSISTANT_MESSAGE_STYLE, TIMESTAMP_STYLE
     USER_MESSAGE_STYLE = user_message_style
     ASSISTANT_MESSAGE_STYLE = assistant_message_style
     TIMESTAMP_STYLE = timestamp_style
     
+    # Create a floating button that opens the chat modal
+    chat_button = html.Div(
+        dbc.Button(
+            html.I(className="fas fa-robot", style={"fontSize": "1.5rem"}),
+            id="open-chat-button",
+            color="primary",
+            className="rounded-circle p-3",
+            style={
+                "position": "fixed",
+                "bottom": "30px",
+                "right": "30px",
+                "width": "60px",
+                "height": "60px",
+                "zIndex": "1000",
+                "boxShadow": "0 4px 8px rgba(0,0,0,0.2)",
+                "display": "flex",
+                "alignItems": "center",
+                "justifyContent": "center",
+                "transition": "all 0.3s ease"
+            }
+        )
+    )
+    
+    # Create the chat modal
+    chat_modal = html.Div(
+        dbc.Card(
+            [
+                dbc.CardHeader(
+                    [
+                        html.Div(
+                            [
+                                html.H4("Asistente de Supply Chain", className="mb-0"),
+                                html.Div([
+                                    dbc.Button(
+                                        "Limpiar",
+                                        id="clear-chat",
+                                        color="link",
+                                        className="me-2",
+                                        style={"fontSize": "0.9rem"}
+                                    ),
+                                    dbc.Button(
+                                        "×",
+                                        id="close-chat",
+                                        className="ms-2 btn-close",
+                                        style={"fontSize": "1.5rem"}
+                                    ),
+                                ], className="d-flex align-items-center"),
+                            ],
+                            className="d-flex justify-content-between align-items-center"
+                        ),
+                    ],
+                    className="bg-primary text-white"
+                ),
+                dbc.CardBody(
+                    [
+                        # Chat history container with scrolling
+                        html.Div(
+                            id="chat-history",
+                            style={
+                                "height": "300px",
+                                "overflowY": "auto",
+                                "display": "flex",
+                                "flexDirection": "column",
+                                "padding": "10px"
+                            }
+                        ),
+                        
+                        # Loading indicator
+                        html.Div(id="loading-output"),
+                        
+                        # Input area
+                        dbc.InputGroup(
+                            [
+                                dbc.Input(
+                                    id="user-input",
+                                    placeholder="Escribe tu mensaje aquí...",
+                                    type="text",
+                                    className="border-primary",
+                                    style={"borderRadius": "20px 0 0 20px"}
+                                ),
+                                dbc.Button(
+                                    html.I(className="fas fa-paper-plane"),
+                                    id="send-button",
+                                    color="primary",
+                                    style={"borderRadius": "0 20px 20px 0"}
+                                ),
+                            ],
+                            className="mt-3"
+                        ),
+                    ]
+                ),
+            ],
+            style={
+                "position": "fixed",
+                "bottom": "100px",
+                "right": "30px",
+                "width": "400px",
+                "maxWidth": "90vw",
+                "zIndex": "1001",
+                "boxShadow": "0 4px 20px rgba(0,0,0,0.15)",
+                "borderRadius": "15px",
+                "display": "none",  # Initially hidden
+                "transition": "all 0.3s ease"
+            },
+            id="chat-modal"
+        )
+    )
+    
+    # Create a store for the conversation history
+    chat_store = dcc.Store(
+        id="conversation-store",
+        data={"messages": []}
+    )
+    
+    # Include Font Awesome for icons
+    font_awesome = html.Link(
+        rel="stylesheet",
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
+    )
+    
     return chat_button, chat_modal, chat_store, font_awesome
 
 def register_callbacks(app):
     """Register the chat-related callbacks with the provided Dash app."""
+    
+    # Asegurar que la tabla de historial de conversaciones existe
+    db_utils.create_conversation_history_table()
     
     @app.callback(
         Output("chat-modal", "style"),
@@ -200,15 +217,47 @@ def register_callbacks(app):
          Output("conversation-store", "data"),
          Output("loading-output", "children")],
         [Input("send-button", "n_clicks"),
-         Input("user-input", "n_submit")],
+         Input("user-input", "n_submit"),
+         Input("chat-modal", "style")],  # Añadido para cargar el historial cuando se abre el chat
         [State("user-input", "value"),
          State("conversation-store", "data")],
         prevent_initial_call=True
     )
-    def process_user_message(n_clicks, n_submit, user_input, conversation_data):
+    def process_user_message(n_clicks, n_submit, modal_style, user_input, conversation_data):
         """Process the user's message and update the chat history."""
-        if not user_input or (not n_clicks and not n_submit):
+        ctx = dash.callback_context
+        trigger = ctx.triggered[0]["prop_id"].split(".")[0]
+        
+        # Si se está abriendo el modal, cargar el historial de la base de datos
+        if trigger == "chat-modal" and modal_style.get("display") == "block":
+            # Obtener o crear un ID de sesión
+            session_id = conversation_data.get("session_id", str(uuid.uuid4()))
+            
+            # Cargar mensajes de la base de datos
+            db_messages = db_utils.get_conversation_history(session_id)
+            
+            # Añadir timestamps si no existen
+            messages = []
+            for msg in db_messages:
+                if "time" not in msg:
+                    msg["time"] = datetime.now().strftime("%H:%M")
+                messages.append(msg)
+            
+            # Actualizar el store con los mensajes y el ID de sesión
+            conversation_data = {
+                "messages": messages,
+                "session_id": session_id
+            }
+            
+            # Actualizar la UI
+            chat_history = messages_to_components(messages)
+            return chat_history, "", conversation_data, ""
+        
+        if not user_input or (not n_clicks and not n_submit) or trigger == "chat-modal":
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        
+        # Obtener o crear un ID de sesión
+        session_id = conversation_data.get("session_id", str(uuid.uuid4()))
         
         # Get current time for timestamp
         timestamp = datetime.now().strftime("%H:%M")
@@ -221,6 +270,9 @@ def register_callbacks(app):
             "time": timestamp
         }
         messages.append(user_message)
+        
+        # Guardar el mensaje del usuario en la base de datos
+        db_utils.save_message(session_id, "user", user_input)
         
         # Update the UI with the user message
         chat_history = messages_to_components(messages)
@@ -248,10 +300,19 @@ def register_callbacks(app):
             messages[-1]["content"] = result.final_output
             messages[-1]["time"] = datetime.now().strftime("%H:%M")
             
+            # Guardar la respuesta del asistente en la base de datos
+            db_utils.save_message(session_id, "assistant", result.final_output)
+            
             # Update the UI with both messages
             chat_history = messages_to_components(messages)
             
-            return chat_history, "", {"messages": messages}, ""
+            # Actualizar el store con los mensajes y el ID de sesión
+            conversation_data = {
+                "messages": messages,
+                "session_id": session_id
+            }
+            
+            return chat_history, "", conversation_data, ""
         except Exception as e:
             # Handle errors
             error_message = {
@@ -260,9 +321,40 @@ def register_callbacks(app):
                 "time": datetime.now().strftime("%H:%M")
             }
             messages.append(error_message)
+            
+            # Guardar el mensaje de error en la base de datos
+            db_utils.save_message(session_id, "assistant", error_message["content"])
+            
             chat_history = messages_to_components(messages)
             
-            return chat_history, "", {"messages": messages}, ""
+            # Actualizar el store con los mensajes y el ID de sesión
+            conversation_data = {
+                "messages": messages,
+                "session_id": session_id
+            }
+            
+            return chat_history, "", conversation_data, ""
+    
+    @app.callback(
+        [Output("chat-history", "children", allow_duplicate=True),
+         Output("conversation-store", "data", allow_duplicate=True)],
+        [Input("clear-chat", "n_clicks")],
+        [State("conversation-store", "data")],
+        prevent_initial_call=True
+    )
+    def clear_chat_history(n_clicks, conversation_data):
+        """Limpiar el historial de chat."""
+        if not n_clicks:
+            return dash.no_update, dash.no_update
+        
+        session_id = conversation_data.get("session_id")
+        if session_id:
+            # Limpiar el historial en la base de datos
+            db_utils.clear_conversation_history(session_id)
+        
+        # Reiniciar el historial en la UI
+        conversation_data["messages"] = []
+        return [], conversation_data
 
 def messages_to_components(messages):
     """Convert message objects to Dash components."""
