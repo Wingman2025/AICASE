@@ -5,6 +5,7 @@ import asyncio
 from datetime import datetime
 import sys
 import os
+import re
 
 # Add the project root to the Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,6 +19,35 @@ from agentsscm import triage_agent, Runner
 # Create the chat components that will be imported into the dashboard
 def create_chat_components():
     """Create and return the chat button, modal, and store components."""
+    
+    # Define styles for chat components
+    user_message_style = {
+        "backgroundColor": "#e9f5ff",
+        "color": "#333333",
+        "padding": "10px 15px",
+        "borderRadius": "18px 18px 0 18px",
+        "maxWidth": "80%",
+        "boxShadow": "0 1px 2px rgba(0,0,0,0.1)",
+        "marginBottom": "5px",
+        "wordWrap": "break-word"
+    }
+    
+    assistant_message_style = {
+        "backgroundColor": "#007bff",
+        "color": "white",
+        "padding": "10px 15px",
+        "borderRadius": "18px 18px 18px 0",
+        "maxWidth": "80%",
+        "boxShadow": "0 1px 2px rgba(0,0,0,0.1)",
+        "marginBottom": "5px",
+        "wordWrap": "break-word"
+    }
+    
+    timestamp_style = {
+        "fontSize": "0.7rem",
+        "color": "#999",
+        "marginTop": "3px"
+    }
     
     # Chat button that will trigger the chat modal
     chat_button = html.Div([
@@ -131,54 +161,13 @@ def create_chat_components():
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     )
     
-    # Add custom CSS for chat messages
-    custom_css = html.Style("""
-        .user-message {
-            background-color: #e9f5ff;
-            border-radius: 18px 18px 0 18px;
-            padding: 10px 15px;
-            margin: 5px 0;
-            max-width: 80%;
-            align-self: flex-end;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-            word-break: break-word;
-        }
-        
-        .assistant-message {
-            background-color: #f1f1f1;
-            border-radius: 18px 18px 18px 0;
-            padding: 10px 15px;
-            margin: 5px 0;
-            max-width: 80%;
-            align-self: flex-start;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-            word-break: break-word;
-        }
-        
-        .chat-timestamp {
-            font-size: 0.7rem;
-            color: #6c757d;
-            margin-top: 2px;
-        }
-        
-        /* Animaciones */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .user-message, .assistant-message {
-            animation: fadeIn 0.3s ease-out;
-        }
-        
-        /* Hover effect for the chat button */
-        #open-chat-button:hover {
-            transform: scale(1.05);
-            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
-        }
-    """)
+    # Define global styles
+    global USER_MESSAGE_STYLE, ASSISTANT_MESSAGE_STYLE, TIMESTAMP_STYLE
+    USER_MESSAGE_STYLE = user_message_style
+    ASSISTANT_MESSAGE_STYLE = assistant_message_style
+    TIMESTAMP_STYLE = timestamp_style
     
-    return chat_button, chat_modal, chat_store, font_awesome, custom_css
+    return chat_button, chat_modal, chat_store, font_awesome
 
 def register_callbacks(app):
     """Register the chat-related callbacks with the provided Dash app."""
@@ -200,8 +189,6 @@ def register_callbacks(app):
         
         if button_id == "open-chat-button":
             current_style.update({"display": "block"})
-            # Añadir una animación de entrada
-            current_style.update({"animation": "fadeIn 0.3s ease-out"})
         else:
             current_style.update({"display": "none"})
         
@@ -218,7 +205,7 @@ def register_callbacks(app):
          State("conversation-store", "data")],
         prevent_initial_call=True
     )
-    async def process_user_message(n_clicks, n_submit, user_input, conversation_data):
+    def process_user_message(n_clicks, n_submit, user_input, conversation_data):
         """Process the user's message and update the chat history."""
         if not user_input or (not n_clicks and not n_submit):
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
@@ -235,29 +222,31 @@ def register_callbacks(app):
         }
         messages.append(user_message)
         
-        # Create the user message UI component
-        user_message_component = html.Div([
-            html.Div(user_input, className="user-message"),
-            html.Div(timestamp, className="chat-timestamp text-end")
-        ], className="d-flex flex-column align-items-end mb-3")
-        
         # Update the UI with the user message
         chat_history = messages_to_components(messages)
         
         # Process the message with the agent
         try:
-            # Pass the entire conversation history to the agent
-            conversation_history = [{"role": msg["role"], "content": msg["content"]} for msg in messages]
-            result = await Runner.run(triage_agent, input=conversation_history)
-            assistant_response = result.final_output
-            
-            # Add assistant response to conversation history
+            # Create a placeholder for the agent's response
             assistant_message = {
                 "role": "assistant",
-                "content": assistant_response,
+                "content": "Procesando tu consulta...",
                 "time": datetime.now().strftime("%H:%M")
             }
             messages.append(assistant_message)
+            
+            # Run the agent in a separate thread to not block the UI
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Pass the entire conversation history to the agent
+            conversation_history = [{"role": msg["role"], "content": msg["content"]} for msg in messages[:-1]]  # Exclude the placeholder
+            result = loop.run_until_complete(Runner.run(triage_agent, input=conversation_history))
+            loop.close()
+            
+            # Update the placeholder with the actual response
+            messages[-1]["content"] = result.final_output
+            messages[-1]["time"] = datetime.now().strftime("%H:%M")
             
             # Update the UI with both messages
             chat_history = messages_to_components(messages)
@@ -282,18 +271,161 @@ def messages_to_components(messages):
     for message in messages:
         if message["role"] == "user":
             component = html.Div([
-                html.Div(message["content"], className="user-message"),
-                html.Div(message["time"], className="chat-timestamp text-end")
+                html.Div(message["content"], 
+                         className="d-inline-block", 
+                         style=USER_MESSAGE_STYLE),
+                html.Div(message["time"], 
+                         className="text-end", 
+                         style=TIMESTAMP_STYLE)
             ], className="d-flex flex-column align-items-end mb-3")
         else:
+            # Procesar el texto para convertir markdown a HTML
+            content = process_markdown(message["content"])
+            
             component = html.Div([
                 html.Div([
                     html.I(className="fas fa-robot me-2 text-primary", style={"fontSize": "0.9rem"}),
-                    message["content"]
-                ], className="assistant-message"),
-                html.Div(message["time"], className="chat-timestamp")
+                    html.Div(content, style={"display": "inline"})
+                ], className="d-inline-block", 
+                   style=ASSISTANT_MESSAGE_STYLE),
+                html.Div(message["time"], style=TIMESTAMP_STYLE)
             ], className="d-flex flex-column align-items-start mb-3")
         
         components.append(component)
     
     return components
+
+def process_markdown(text):
+    """
+    Procesa texto en formato markdown y lo convierte a componentes Dash HTML.
+    Soporta: negrita, cursiva, listas y saltos de línea.
+    """
+    # Patrones para diferentes elementos de Markdown
+    bold_pattern = r'\*\*(.*?)\*\*'
+    italic_pattern = r'\*(.*?)\*'
+    list_item_pattern = r'^\s*[-*]\s+(.*?)$'
+    
+    # Crear componentes para cada parte del texto
+    components = []
+    last_end = 0
+    
+    # Primero procesamos negrita
+    for match in re.finditer(bold_pattern, text):
+        # Añadir texto normal antes del formato
+        if match.start() > last_end:
+            components.append(text[last_end:match.start()])
+        
+        # Añadir texto en negrita
+        bold_text = match.group(1)
+        components.append(html.Strong(bold_text))
+        
+        last_end = match.end()
+    
+    # Añadir el resto del texto después del último formato
+    if last_end < len(text):
+        components.append(text[last_end:])
+    
+    # Ahora procesamos cursiva en los componentes de texto
+    processed_components = []
+    for component in components:
+        if isinstance(component, str):
+            # Procesar cursiva
+            italic_components = []
+            last_end = 0
+            
+            for match in re.finditer(italic_pattern, component):
+                # Añadir texto normal antes del formato
+                if match.start() > last_end:
+                    italic_components.append(component[last_end:match.start()])
+                
+                # Añadir texto en cursiva
+                italic_text = match.group(1)
+                italic_components.append(html.Em(italic_text))
+                
+                last_end = match.end()
+            
+            # Añadir el resto del texto
+            if last_end < len(component):
+                italic_components.append(component[last_end:])
+            
+            processed_components.extend(italic_components)
+        else:
+            processed_components.append(component)
+    
+    # Procesar saltos de línea y listas
+    final_components = []
+    lines = []
+    current_line = []
+    
+    for component in processed_components:
+        if isinstance(component, str):
+            # Dividir por saltos de línea
+            parts = component.split('\n')
+            for i, part in enumerate(parts):
+                if i > 0:  # Si no es la primera parte, es un salto de línea
+                    lines.append(current_line)
+                    current_line = []
+                if part:  # Si no está vacío
+                    current_line.append(part)
+        else:
+            current_line.append(component)
+    
+    if current_line:
+        lines.append(current_line)
+    
+    # Procesar cada línea para detectar elementos de lista
+    in_list = False
+    list_items = []
+    
+    for line in lines:
+        # Convertir componentes de la línea a texto para verificar si es un elemento de lista
+        line_text = ''.join([c if isinstance(c, str) else '' for c in line])
+        list_match = re.match(list_item_pattern, line_text)
+        
+        if list_match:
+            # Es un elemento de lista
+            if not in_list:
+                # Iniciar una nueva lista
+                in_list = True
+                list_items = []
+            
+            # Añadir el elemento a la lista actual
+            list_content = []
+            found_marker = False
+            
+            for component in line:
+                if isinstance(component, str) and not found_marker:
+                    # Buscar y eliminar el marcador de lista
+                    marker_match = re.search(r'^\s*[-*]\s+', component)
+                    if marker_match:
+                        found_marker = True
+                        rest = component[marker_match.end():]
+                        if rest:
+                            list_content.append(rest)
+                    else:
+                        list_content.append(component)
+                else:
+                    list_content.append(component)
+            
+            list_items.append(html.Li(list_content))
+        else:
+            # No es un elemento de lista
+            if in_list:
+                # Finalizar la lista anterior
+                final_components.append(html.Ul(list_items, style={"marginLeft": "20px"}))
+                in_list = False
+            
+            # Añadir la línea normal
+            if line:
+                final_components.append(html.Div(line))
+                final_components.append(html.Br())
+    
+    # Finalizar la última lista si existe
+    if in_list:
+        final_components.append(html.Ul(list_items, style={"marginLeft": "20px"}))
+    
+    # Eliminar el último <br> si existe
+    if final_components and isinstance(final_components[-1], html.Br):
+        final_components.pop()
+    
+    return final_components

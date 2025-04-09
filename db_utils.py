@@ -371,3 +371,34 @@ def generate_future_data(start_date: str, days: int) -> str:
     except Exception as e:
         print(f"Error en generate_future_data: {str(e)}")
         return f"Error generating future data: {str(e)}"
+
+def delete_all_data() -> str:
+    """
+    Elimina todos los datos de la tabla daily_data para comenzar desde cero.
+    
+    Returns:
+        Mensaje indicando el éxito o error de la operación.
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Obtener el número de registros antes de eliminar
+        cursor.execute("SELECT COUNT(*) FROM daily_data")
+        count_before = cursor.fetchone()[0]
+        
+        # Eliminar todos los registros
+        cursor.execute("DELETE FROM daily_data")
+        
+        # Verificar que todos los registros se hayan eliminado
+        cursor.execute("SELECT COUNT(*) FROM daily_data")
+        count_after = cursor.fetchone()[0]
+        
+        conn.commit()
+        conn.close()
+        
+        return f"Se han eliminado correctamente {count_before} registros de la base de datos. La tabla ahora está vacía y lista para comenzar desde cero."
+    
+    except Exception as e:
+        print(f"Error al eliminar los datos: {str(e)}")
+        return f"Error al eliminar los datos: {str(e)}"
