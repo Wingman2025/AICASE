@@ -501,10 +501,28 @@ def get_user_sessions(user_id):
         cursor = conn.cursor()
         
         if IS_RAILWAY:
-            cursor.execute(
-                "SELECT DISTINCT session_id FROM conversation_history WHERE user_id = %s ORDER BY MIN(timestamp) DESC",
-                (user_id,)
-            )
+            try:
+                # En PostgreSQL, usamos una subconsulta para poder ordenar por MIN(timestamp)
+                cursor.execute("""
+                    SELECT session_id 
+                    FROM (
+                        SELECT session_id, MIN(timestamp) as min_time 
+                        FROM conversation_history 
+                        WHERE user_id = %s 
+                        GROUP BY session_id
+                    ) AS subquery 
+                    ORDER BY min_time DESC
+                """, (user_id,))
+            except Exception as e:
+                if "column \"user_id\" does not exist" in str(e):
+                    # Si la columna no existe, ejecutar la migración y retornar una lista vacía
+                    print("La columna user_id no existe. Ejecutando migración...")
+                    conn.close()
+                    migrate_conversation_history_table()
+                    return []
+                else:
+                    # Si es otro tipo de error, relanzarlo
+                    raise e
         else:
             cursor.execute(
                 "SELECT DISTINCT session_id FROM conversation_history WHERE user_id = ? GROUP BY session_id ORDER BY MIN(timestamp) DESC",
