@@ -685,7 +685,7 @@ def create_users_table():
         # PostgreSQL
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
+                id TEXT PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
                 display_name TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -695,7 +695,7 @@ def create_users_table():
         # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id TEXT PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
                 display_name TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
