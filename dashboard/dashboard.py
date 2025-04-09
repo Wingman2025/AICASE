@@ -1,13 +1,13 @@
 import dash
 from dash import dcc, html
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
 import sqlite3
 import sys
 import os
 from datetime import datetime
 import uuid
-from flask_login import UserMixin, login_user, current_user
+from flask_login import UserMixin, login_user, current_user, LoginManager, logout_user
 
 # Try to import Railway-specific packages, but continue if not available
 try:
@@ -26,11 +26,48 @@ sys.path.append(project_root)
 
 # Import the chatbot module
 import chatbot
+import db_utils
 
 # Initialize the Dash app with Bootstrap
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "Supply Chain Dashboard"
 server = app.server  # Expose Flask server for Gunicorn
+
+# Configurar Flask-Login
+server.config['SECRET_KEY'] = 'supply-chain-dashboard-secret-key-2025'  # Clave secreta para las sesiones
+login_manager = LoginManager()
+login_manager.init_app(server)
+login_manager.login_view = '/login'
+
+# Definir la clase User
+class User(UserMixin):
+    def __init__(self, user_dict):
+        self.id = user_dict["id"]
+        self.display_name = user_dict["display_name"]
+
+@login_manager.user_loader
+def load_user(user_id):
+    # Cargar usuario desde la base de datos
+    conn = db_utils.get_connection()
+    cursor = conn.cursor()
+    
+    if db_utils.IS_RAILWAY:
+        cursor.execute("SELECT id, username, display_name FROM users WHERE id = %s", (user_id,))
+    else:
+        cursor.execute("SELECT id, username, display_name FROM users WHERE id = ?", (user_id,))
+    
+    user = cursor.fetchone()
+    conn.close()
+    
+    if user:
+        user_dict = {
+            "id": user[0],
+            "username": user[1],
+            "display_name": user[2] or user[1]
+        }
+        return User(user_dict)
+    
+    return None
 
 # Configure static file serving for production
 if RAILWAY_DEPLOYMENT and 'RAILWAY_STATIC_URL' in os.environ:
@@ -42,7 +79,7 @@ if RAILWAY_DEPLOYMENT and 'RAILWAY_STATIC_URL' in os.environ:
         pass  # Continue without whitenoise if not installed
 
 # Get chat components from the chatbot module
-chat_button, chat_modal, chat_store, font_awesome = chatbot.create_chat_components()
+chat_button, chat_modal, chat_store, session_store, font_awesome = chatbot.create_chat_components()
 
 # Set global styles for message components in chatbot module
 chatbot.USER_MESSAGE_STYLE = {'textAlign': 'left', 'margin': '5px'}
@@ -155,29 +192,28 @@ def get_navbar():
 
 # Define the layout with a navigation bar, styled table, footer, and chat components
 app.layout = html.Div([
+    # URL Location component - needed for navigation
+    dcc.Location(id='url', refresh=True),
+    
     # Navigation bar
     get_navbar(),
     
     # Login form
-    login_form,
+    html.Div(id="login-form", children=[login_form], style={'display': 'block'}),
     
     # Session selector
-    html.Div(id="session-selector-container"),
+    html.Div(id="session-selector-container", style={'display': 'none'}),
     
     # Tabs for navigation
     dcc.Tabs(id='tabs-example', value='tab-1', children=[
         dcc.Tab(label='Daily Data', value='tab-1', style={'padding': '10px'}),
-    ], style={'fontSize': '18px', 'fontWeight': 'bold'}),
-
-    # Refresh button
+        dcc.Tab(label='Inventory Analysis', value='tab-2', style={'padding': '10px'}),
+        dcc.Tab(label='Demand Forecast', value='tab-3', style={'padding': '10px'}),
+    ], style={'margin': '10px', 'display': 'none'}),
+    
+    # Refresh button and notification
     html.Div([
-        dbc.Button(
-            [html.I(className="fas fa-sync-alt me-2"), "Actualizar Datos"],
-            id="refresh-button",
-            color="success",
-            className="mb-3",
-            style={'marginTop': '10px'}
-        ),
+        dbc.Button("Actualizar Datos", id="refresh-button", color="primary", className="mr-1"),
         html.Div(id="refresh-notification", style={'color': 'green', 'marginTop': '5px'})
     ], style={'textAlign': 'center'}),
 
@@ -194,6 +230,7 @@ app.layout = html.Div([
     chat_button,
     chat_modal,
     chat_store,
+    session_store,
     font_awesome,
     
     # Hidden div to store user data
@@ -290,6 +327,7 @@ def handle_login(n_clicks, username):
         
         return "", user_dict, "/"
     except Exception as e:
+        print(f"Error al iniciar sesión: {str(e)}")
         return f"Error al iniciar sesión: {str(e)}", None, dash.no_update
 
 # Callback para seleccionar una sesión
@@ -320,13 +358,37 @@ def show_session_selector(user_data):
     
     return create_session_selector(user_data["id"])
 
+# Callback para manejar el cierre de sesión
+@app.callback(
+    [Output('user-store', 'data', allow_duplicate=True),
+     Output('url', 'pathname', allow_duplicate=True)],
+    [Input('logout-button', 'n_clicks')],
+    prevent_initial_call=True
+)
+def handle_logout(n_clicks):
+    if n_clicks:
+        logout_user()
+        return None, "/login"
+    return dash.no_update, dash.no_update
+
+# Callback para mostrar/ocultar componentes según el estado de autenticación
+@app.callback(
+    [Output('login-form', 'style'),
+     Output('session-selector-container', 'style'),
+     Output('tabs-example', 'style')],
+    [Input('url', 'pathname'),
+     Input('user-store', 'data')]
+)
+def update_ui_based_on_auth(pathname, user_data):
+    # Si el usuario está autenticado
+    if user_data:
+        return {'display': 'none'}, {'display': 'block'}, {'display': 'block', 'margin': '10px'}
+    # Si el usuario no está autenticado
+    else:
+        return {'display': 'block'}, {'display': 'none'}, {'display': 'none'}
+
 # Register the chatbot callbacks
 chatbot.register_callbacks(app)
-
-class User(UserMixin):
-    def __init__(self, user_dict):
-        self.id = user_dict["id"]
-        self.display_name = user_dict["display_name"]
 
 if __name__ == '__main__':
     # Use standard configuration for local development

@@ -1,16 +1,19 @@
 import os
 import sqlite3
+import psycopg2
 import pandas as pd
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import numpy as np
+import traceback
+import uuid
 
 # Cargar variables de entorno
 load_dotenv()
 
-# Verificar si estamos en Railway (tiene DATABASE_URL configurado)
-IS_RAILWAY = os.getenv("DATABASE_URL") is not None
+# Verificar si estamos en Railway (PostgreSQL) o local (SQLite)
+IS_RAILWAY = 'DATABASE_URL' in os.environ
 
 def get_db_path():
     """
@@ -26,19 +29,22 @@ def get_db_path():
 
 def get_connection():
     """
-    Get a connection to the database.
-    Returns SQLite connection locally and PostgreSQL connection on Railway.
+    Obtiene una conexión a la base de datos, ya sea SQLite (local) o PostgreSQL (Railway).
+    
+    Returns:
+        Objeto de conexión a la base de datos
     """
     if IS_RAILWAY:
-        # Importar psycopg2 solo si estamos en Railway
-        import psycopg2
-        
-        db_url = os.getenv("DATABASE_URL")
-        return psycopg2.connect(db_url)
+        # Conexión a PostgreSQL en Railway
+        DATABASE_URL = os.environ['DATABASE_URL']
+        conn = psycopg2.connect(DATABASE_URL)
     else:
+        # Conexión a SQLite local
         db_path = get_db_path()
         print(f"Using database at: {db_path}")
-        return sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path)
+    
+    return conn
 
 def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
     """
@@ -316,6 +322,28 @@ def generate_future_data(start_date: str, days: int) -> str:
         conn = get_connection()
         cursor = conn.cursor()
         
+        # Verificar que la tabla existe
+        if IS_RAILWAY:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS daily_data (
+                    id SERIAL PRIMARY KEY,
+                    date TEXT NOT NULL UNIQUE,
+                    demand INTEGER,
+                    production_plan INTEGER,
+                    inventory INTEGER
+                )
+            """)
+        else:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS daily_data (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL UNIQUE,
+                    demand INTEGER,
+                    production_plan INTEGER,
+                    inventory INTEGER
+                )
+            """)
+        
         # Insert data for each date
         inserted_count = 0
         updated_count = 0
@@ -345,27 +373,33 @@ def generate_future_data(start_date: str, days: int) -> str:
                 print(f"Actualizado registro para {formatted_dates[i]}: demanda={int(demand[i])}, producción={int(production_plan[i])}, inventario={int(inventory[i])}")
             else:
                 # Insert new record
-                if IS_RAILWAY:
-                    cursor.execute(
-                        "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (%s, %s, %s, %s)",
-                        (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
-                    )
-                else:
-                    cursor.execute(
-                        "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (?, ?, ?, ?)",
-                        (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
-                    )
-                inserted_count += 1
-                print(f"Insertado nuevo registro para {formatted_dates[i]}: demanda={int(demand[i])}, producción={int(production_plan[i])}, inventario={int(inventory[i])}")
+                try:
+                    if IS_RAILWAY:
+                        cursor.execute(
+                            "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (%s, %s, %s, %s)",
+                            (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
+                        )
+                    else:
+                        cursor.execute(
+                            "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (?, ?, ?, ?)",
+                            (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
+                        )
+                    inserted_count += 1
+                    print(f"Insertado nuevo registro para {formatted_dates[i]}: demanda={int(demand[i])}, producción={int(production_plan[i])}, inventario={int(inventory[i])}")
+                except Exception as e:
+                    print(f"Error al insertar registro para {formatted_dates[i]}: {str(e)}")
         
         # Verificar que los datos se hayan guardado correctamente
-        if IS_RAILWAY:
-            cursor.execute("SELECT date, demand FROM daily_data WHERE date = %s", (formatted_dates[0],))
-        else:
-            cursor.execute("SELECT date, demand FROM daily_data WHERE date = ?", (formatted_dates[0],))
-        
-        first_record = cursor.fetchone()
-        print(f"Verificación del primer registro: {first_record}")
+        try:
+            if IS_RAILWAY:
+                cursor.execute("SELECT date, demand FROM daily_data WHERE date = %s", (formatted_dates[0],))
+            else:
+                cursor.execute("SELECT date, demand FROM daily_data WHERE date = ?", (formatted_dates[0],))
+            
+            first_record = cursor.fetchone()
+            print(f"Verificación del primer registro: {first_record}")
+        except Exception as e:
+            print(f"Error al verificar el primer registro: {str(e)}")
         
         conn.commit()
         conn.close()
@@ -374,6 +408,7 @@ def generate_future_data(start_date: str, days: int) -> str:
     
     except Exception as e:
         print(f"Error en generate_future_data: {str(e)}")
+        traceback.print_exc()  # Imprimir el traceback completo para depuración
         return f"Error generating future data: {str(e)}"
 
 def delete_all_data() -> str:
@@ -416,29 +451,145 @@ def create_conversation_history_table():
     
     if IS_RAILWAY:
         # PostgreSQL
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS conversation_history (
-            id SERIAL PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_history (
+                id SERIAL PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                user_id TEXT,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
     else:
         # SQLite
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS conversation_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                user_id TEXT,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Verificar si la columna user_id existe en SQLite
+        cursor.execute("PRAGMA table_info(conversation_history)")
+        columns = cursor.fetchall()
+        column_names = [col[1] for col in columns]
+        
+        if 'user_id' not in column_names:
+            cursor.execute("ALTER TABLE conversation_history ADD COLUMN user_id TEXT")
+            print("Columna user_id añadida a la tabla conversation_history en SQLite")
     
     conn.commit()
     conn.close()
+
+def get_user_sessions(user_id):
+    """
+    Obtiene todas las sesiones únicas de un usuario.
+    
+    Args:
+        user_id (str): ID del usuario
+        
+    Returns:
+        list: Lista de IDs de sesión
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        if IS_RAILWAY:
+            cursor.execute(
+                "SELECT DISTINCT session_id FROM conversation_history WHERE user_id = %s ORDER BY MIN(timestamp) DESC",
+                (user_id,)
+            )
+        else:
+            cursor.execute(
+                "SELECT DISTINCT session_id FROM conversation_history WHERE user_id = ? GROUP BY session_id ORDER BY MIN(timestamp) DESC",
+                (user_id,)
+            )
+        
+        sessions = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return sessions
+    except Exception as e:
+        print(f"Error al obtener sesiones del usuario: {str(e)}")
+        traceback.print_exc()  # Imprimir el traceback completo para depuración
+        return []
+
+def get_or_create_user(username):
+    """
+    Obtiene un usuario por su nombre de usuario o lo crea si no existe.
+    
+    Args:
+        username (str): Nombre de usuario
+        
+    Returns:
+        dict: Datos del usuario
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Buscar usuario existente
+    if IS_RAILWAY:
+        cursor.execute("SELECT id, username, display_name FROM users WHERE username = %s", (username,))
+    else:
+        cursor.execute("SELECT id, username, display_name FROM users WHERE username = ?", (username,))
+    
+    user = cursor.fetchone()
+    
+    if user:
+        user_dict = {
+            "id": user[0],
+            "username": user[1],
+            "display_name": user[2] or user[1]
+        }
+    else:
+        # Crear tabla de usuarios si no existe
+        if IS_RAILWAY:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    display_name TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        else:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    display_name TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        
+        # Crear nuevo usuario
+        user_id = str(uuid.uuid4())
+        if IS_RAILWAY:
+            cursor.execute(
+                "INSERT INTO users (id, username) VALUES (%s, %s)",
+                (user_id, username)
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO users (id, username) VALUES (?, ?)",
+                (user_id, username)
+            )
+        
+        user_dict = {
+            "id": user_id,
+            "username": username,
+            "display_name": username
+        }
+    
+    conn.commit()
+    conn.close()
+    
+    return user_dict
 
 def save_message(session_id, role, content):
     """
@@ -532,87 +683,27 @@ def create_users_table():
     
     if IS_RAILWAY:
         # PostgreSQL
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            display_name TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                display_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
     else:
         # SQLite
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            display_name TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                display_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
     
     conn.commit()
     conn.close()
-
-def get_or_create_user(username):
-    """
-    Obtiene un usuario existente o crea uno nuevo si no existe.
-    
-    Args:
-        username: Nombre de usuario único (email o identificador)
-        
-    Returns:
-        Diccionario con la información del usuario
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    # Normalizar el nombre de usuario (convertir a minúsculas)
-    username = username.lower().strip()
-    
-    # Intentar obtener el usuario
-    if IS_RAILWAY:
-        cursor.execute("SELECT id, username, display_name FROM users WHERE username = %s", (username,))
-    else:
-        cursor.execute("SELECT id, username, display_name FROM users WHERE username = ?", (username,))
-    
-    user = cursor.fetchone()
-    
-    if user:
-        # Usuario encontrado
-        user_dict = {
-            "id": user[0],
-            "username": user[1],
-            "display_name": user[2] or username
-        }
-    else:
-        # Crear nuevo usuario
-        display_name = username.split('@')[0] if '@' in username else username
-        display_name = display_name.capitalize()
-        
-        if IS_RAILWAY:
-            cursor.execute(
-                "INSERT INTO users (username, display_name) VALUES (%s, %s) RETURNING id",
-                (username, display_name)
-            )
-            user_id = cursor.fetchone()[0]
-        else:
-            cursor.execute(
-                "INSERT INTO users (username, display_name) VALUES (?, ?)",
-                (username, display_name)
-            )
-            user_id = cursor.lastrowid
-        
-        user_dict = {
-            "id": user_id,
-            "username": username,
-            "display_name": display_name
-        }
-    
-    conn.commit()
-    conn.close()
-    
-    return user_dict
 
 def update_user_display_name(user_id, display_name):
     """
@@ -641,34 +732,6 @@ def update_user_display_name(user_id, display_name):
     except Exception as e:
         conn.close()
         return f"Error al actualizar el nombre de visualización: {str(e)}"
-
-def get_user_sessions(user_id):
-    """
-    Obtiene todas las sesiones únicas asociadas a un usuario.
-    
-    Args:
-        user_id: ID del usuario
-        
-    Returns:
-        Lista de IDs de sesión únicos
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    if IS_RAILWAY:
-        cursor.execute(
-            "SELECT DISTINCT session_id FROM conversation_history WHERE user_id = %s",
-            (user_id,)
-        )
-    else:
-        cursor.execute(
-            "SELECT DISTINCT session_id FROM conversation_history WHERE user_id = ?",
-            (user_id,)
-        )
-    
-    sessions = [row[0] for row in cursor.fetchall()]
-    conn.close()
-    return sessions
 
 def save_message_with_user(user_id, session_id, role, content):
     """
