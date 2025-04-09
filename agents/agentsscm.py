@@ -224,10 +224,18 @@ async def main():
     print(f"ID de sesión: {session_id}")
     
     # Recuperar el historial de conversación existente o inicializar uno vacío
-    conversation_history = db_utils.get_conversation_history(session_id)
+    db_conversation = db_utils.get_conversation_history(session_id)
+    
+    # Inicializar el historial para el agente
+    agent_messages = []
+    if db_conversation:
+        # Si hay conversación previa en la base de datos, cargarla para el agente
+        agent_messages = [{"role": msg["role"], "content": msg["content"]} for msg in db_conversation]
     
     print("Hi! I am your supply chain assistant. Type 'exit' to quit.")
     print("Type 'clear history' to borrar el historial de esta sesión.")
+    
+    result = None  # Para almacenar el resultado de la ejecución anterior
     
     while True:
         user_input = input("You: ")
@@ -238,26 +246,33 @@ async def main():
         if user_input.lower() == 'clear history':
             # Limpiar el historial de conversación
             db_utils.clear_conversation_history(session_id)
-            conversation_history = []
+            agent_messages = []
+            result = None
             print("Historial de conversación eliminado.")
             continue
-
-        # Append the user's message to the conversation history.
-        conversation_history.append({"role": "user", "content": user_input})
         
         # Guardar el mensaje del usuario en la base de datos
         db_utils.save_message(session_id, "user", user_input)
-
-        # Convertir el historial de conversación al formato esperado por el agente
-        messages_for_agent = [{"role": msg["role"], "content": msg["content"]} for msg in conversation_history]
-        result = await Runner.run(triage_agent, input=messages_for_agent)
-
-        # Append the agent's response to the conversation history.
-        conversation_history.append({"role": "assistant", "content": result.final_output})
+        
+        # Preparar la entrada para el agente
+        if result:
+            # Si hay un resultado previo, usar to_input_list() para mantener el contexto
+            new_input = result.to_input_list() + [{"role": "user", "content": user_input}]
+        else:
+            # Primera interacción o después de limpiar el historial
+            if agent_messages:
+                # Si hay mensajes previos en la base de datos
+                new_input = agent_messages + [{"role": "user", "content": user_input}]
+            else:
+                # Completamente nuevo
+                new_input = [{"role": "user", "content": user_input}]
+        
+        # Ejecutar el agente con la entrada preparada
+        result = await Runner.run(triage_agent, input=new_input)
         
         # Guardar la respuesta del asistente en la base de datos
         db_utils.save_message(session_id, "assistant", result.final_output)
-
+        
         print("Assistant:", result.final_output)
 
 if __name__ == "__main__":
