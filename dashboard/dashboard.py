@@ -27,6 +27,74 @@ sys.path.append(project_root)
 # Import the chatbot module
 import chatbot
 import db_utils
+import uuid
+import traceback
+
+# Función para migrar la tabla de usuarios de ID entero a UUID
+def migrate_users_table_if_needed():
+    """Migrar la tabla de usuarios de ID entero a UUID si es necesario."""
+    if not RAILWAY_DEPLOYMENT:
+        return  # Solo ejecutar en Railway
+    
+    try:
+        conn = db_utils.get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar si la tabla users existe y tiene la columna id como entero
+        cursor.execute("""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'id'
+        """)
+        
+        column_info = cursor.fetchone()
+        
+        # Si la columna id existe y es de tipo integer o bigint, necesitamos migrar
+        if column_info and column_info[1].lower() in ('integer', 'bigint'):
+            print("Iniciando migración de la tabla de usuarios...")
+            
+            # Crear tabla temporal con la nueva estructura
+            cursor.execute("""
+                CREATE TABLE users_temp (
+                    id TEXT PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    display_name TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Obtener usuarios existentes
+            cursor.execute("SELECT id, username, display_name, created_at FROM users")
+            users = cursor.fetchall()
+            
+            # Insertar usuarios en la tabla temporal con UUIDs
+            for user in users:
+                old_id, username, display_name, created_at = user
+                new_id = str(uuid.uuid4())
+                
+                # Actualizar referencias en conversation_history
+                cursor.execute(
+                    "UPDATE conversation_history SET user_id = %s WHERE user_id = %s",
+                    (new_id, str(old_id))
+                )
+                
+                # Insertar en la tabla temporal
+                cursor.execute(
+                    "INSERT INTO users_temp (id, username, display_name, created_at) VALUES (%s, %s, %s, %s)",
+                    (new_id, username, display_name or username, created_at or 'now()')
+                )
+            
+            # Eliminar tabla original y renombrar la temporal
+            cursor.execute("DROP TABLE users")
+            cursor.execute("ALTER TABLE users_temp RENAME TO users")
+            
+            conn.commit()
+            print("Migración completada con éxito.")
+        
+        conn.close()
+    except Exception as e:
+        print(f"Error durante la verificación/migración de la tabla de usuarios: {str(e)}")
+        traceback.print_exc()
 
 # Initialize the Dash app with Bootstrap
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -424,6 +492,9 @@ def update_ui_based_on_auth(pathname, user_data):
 
 # Register the chatbot callbacks
 chatbot.register_callbacks(app)
+
+# Ejecutar la migración de usuarios automáticamente al iniciar la aplicación en Railway
+migrate_users_table_if_needed()
 
 if __name__ == '__main__':
     # Use standard configuration for local development
