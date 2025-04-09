@@ -23,3 +23,6 @@ psycopg2-binary==2.9.9  # PostgreSQL adapter (Railway often uses PostgreSQL)
 dj-database-url==2.1.0  # For database URL parsing
 whitenoise==6.6.0  # For serving static files
 flask-login==0.5.0  # For user authentication
+
+# Pin Flask to a version compatible with flask-login (e.g., Flask 2.2.2)
+Flask==2.2.2
