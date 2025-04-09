@@ -439,7 +439,7 @@ def create_conversation_history_table():
     
     conn.commit()
     conn.close()
-    
+
 def save_message(session_id, role, content):
     """
     Guarda un mensaje en el historial de conversaciones.
@@ -522,3 +522,221 @@ def clear_conversation_history(session_id):
     conn.close()
     
     return f"Historial de conversación eliminado para la sesión {session_id}"
+
+def create_users_table():
+    """
+    Crea la tabla para almacenar usuarios si no existe.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if IS_RAILWAY:
+        # PostgreSQL
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            display_name TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+    else:
+        # SQLite
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            display_name TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+    
+    conn.commit()
+    conn.close()
+
+def get_or_create_user(username):
+    """
+    Obtiene un usuario existente o crea uno nuevo si no existe.
+    
+    Args:
+        username: Nombre de usuario único (email o identificador)
+        
+    Returns:
+        Diccionario con la información del usuario
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Normalizar el nombre de usuario (convertir a minúsculas)
+    username = username.lower().strip()
+    
+    # Intentar obtener el usuario
+    if IS_RAILWAY:
+        cursor.execute("SELECT id, username, display_name FROM users WHERE username = %s", (username,))
+    else:
+        cursor.execute("SELECT id, username, display_name FROM users WHERE username = ?", (username,))
+    
+    user = cursor.fetchone()
+    
+    if user:
+        # Usuario encontrado
+        user_dict = {
+            "id": user[0],
+            "username": user[1],
+            "display_name": user[2] or username
+        }
+    else:
+        # Crear nuevo usuario
+        display_name = username.split('@')[0] if '@' in username else username
+        display_name = display_name.capitalize()
+        
+        if IS_RAILWAY:
+            cursor.execute(
+                "INSERT INTO users (username, display_name) VALUES (%s, %s) RETURNING id",
+                (username, display_name)
+            )
+            user_id = cursor.fetchone()[0]
+        else:
+            cursor.execute(
+                "INSERT INTO users (username, display_name) VALUES (?, ?)",
+                (username, display_name)
+            )
+            user_id = cursor.lastrowid
+        
+        user_dict = {
+            "id": user_id,
+            "username": username,
+            "display_name": display_name
+        }
+    
+    conn.commit()
+    conn.close()
+    
+    return user_dict
+
+def update_user_display_name(user_id, display_name):
+    """
+    Actualiza el nombre de visualización de un usuario.
+    
+    Args:
+        user_id: ID del usuario
+        display_name: Nuevo nombre de visualización
+        
+    Returns:
+        Mensaje de éxito o error
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if IS_RAILWAY:
+            cursor.execute("UPDATE users SET display_name = %s WHERE id = %s", (display_name, user_id))
+        else:
+            cursor.execute("UPDATE users SET display_name = ? WHERE id = ?", (display_name, user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return f"Nombre de visualización actualizado a {display_name}"
+    except Exception as e:
+        conn.close()
+        return f"Error al actualizar el nombre de visualización: {str(e)}"
+
+def get_user_sessions(user_id):
+    """
+    Obtiene todas las sesiones únicas asociadas a un usuario.
+    
+    Args:
+        user_id: ID del usuario
+        
+    Returns:
+        Lista de IDs de sesión únicos
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if IS_RAILWAY:
+        cursor.execute(
+            "SELECT DISTINCT session_id FROM conversation_history WHERE user_id = %s",
+            (user_id,)
+        )
+    else:
+        cursor.execute(
+            "SELECT DISTINCT session_id FROM conversation_history WHERE user_id = ?",
+            (user_id,)
+        )
+    
+    sessions = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return sessions
+
+def save_message_with_user(user_id, session_id, role, content):
+    """
+    Guarda un mensaje en el historial de conversaciones con ID de usuario.
+    
+    Args:
+        user_id: ID del usuario
+        session_id: Identificador único de la sesión
+        role: Rol del mensaje ('user' o 'assistant')
+        content: Contenido del mensaje
+        
+    Returns:
+        ID del mensaje guardado
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if IS_RAILWAY:
+        # PostgreSQL
+        cursor.execute(
+            "INSERT INTO conversation_history (session_id, role, content, user_id) VALUES (%s, %s, %s, %s) RETURNING id",
+            (session_id, role, content, user_id)
+        )
+        message_id = cursor.fetchone()[0]
+    else:
+        # SQLite
+        cursor.execute(
+            "INSERT INTO conversation_history (session_id, role, content, user_id) VALUES (?, ?, ?, ?)",
+            (session_id, role, content, user_id)
+        )
+        message_id = cursor.lastrowid
+    
+    conn.commit()
+    conn.close()
+    
+    return message_id
+
+def get_user_conversation_history(user_id, session_id):
+    """
+    Obtiene el historial de conversación para un usuario y sesión específicos.
+    
+    Args:
+        user_id: ID del usuario
+        session_id: Identificador único de la sesión
+        
+    Returns:
+        Lista de diccionarios con los mensajes de la conversación
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if IS_RAILWAY:
+        cursor.execute(
+            "SELECT role, content FROM conversation_history WHERE user_id = %s AND session_id = %s ORDER BY id ASC",
+            (user_id, session_id)
+        )
+    else:
+        cursor.execute(
+            "SELECT role, content FROM conversation_history WHERE user_id = ? AND session_id = ? ORDER BY id ASC",
+            (user_id, session_id)
+        )
+    
+    messages = []
+    for row in cursor.fetchall():
+        messages.append({
+            "role": row[0],
+            "content": row[1]
+        })
+    
+    conn.close()
+    return messages

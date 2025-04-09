@@ -7,6 +7,7 @@ import sys
 import os
 import re
 import uuid
+from flask_login import current_user
 
 # Add the project root to the Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -175,19 +176,26 @@ def create_chat_components():
         data={"messages": []}
     )
     
+    # Create a store for the session
+    session_store = dcc.Store(
+        id="session-store",
+        data={"session_id": str(uuid.uuid4())}
+    )
+    
     # Include Font Awesome for icons
     font_awesome = html.Link(
         rel="stylesheet",
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
     )
     
-    return chat_button, chat_modal, chat_store, font_awesome
+    return chat_button, chat_modal, chat_store, session_store, font_awesome
 
 def register_callbacks(app):
     """Register the chat-related callbacks with the provided Dash app."""
     
     # Asegurar que la tabla de historial de conversaciones existe
     db_utils.create_conversation_history_table()
+    db_utils.create_users_table()
     
     @app.callback(
         Output("chat-modal", "style"),
@@ -218,46 +226,66 @@ def register_callbacks(app):
          Output("loading-output", "children")],
         [Input("send-button", "n_clicks"),
          Input("user-input", "n_submit"),
-         Input("chat-modal", "style")],  # Añadido para cargar el historial cuando se abre el chat
+         Input("chat-modal", "style"),  # Añadido para cargar el historial cuando se abre el chat
+         Input("session-store", "data")],  # Añadido para cargar el historial de la sesión seleccionada
         [State("user-input", "value"),
          State("conversation-store", "data")],
         prevent_initial_call=True
     )
-    def process_user_message(n_clicks, n_submit, modal_style, user_input, conversation_data):
+    def process_user_message(n_clicks, n_submit, modal_style, session_store, user_input, conversation_data):
         """Process the user's message and update the chat history."""
         ctx = dash.callback_context
         trigger = ctx.triggered[0]["prop_id"].split(".")[0]
         
-        # Si se está abriendo el modal, cargar el historial de la base de datos
-        if trigger == "chat-modal" and modal_style.get("display") == "block":
-            # Obtener o crear un ID de sesión
-            session_id = conversation_data.get("session_id", str(uuid.uuid4()))
-            
-            # Cargar mensajes de la base de datos
-            db_messages = db_utils.get_conversation_history(session_id)
-            
-            # Añadir timestamps si no existen
-            messages = []
-            for msg in db_messages:
-                if "time" not in msg:
-                    msg["time"] = datetime.now().strftime("%H:%M")
-                messages.append(msg)
-            
-            # Actualizar el store con los mensajes y el ID de sesión
-            conversation_data = {
-                "messages": messages,
-                "session_id": session_id
-            }
+        # Verificar si el usuario está autenticado
+        user_authenticated = hasattr(current_user, 'is_authenticated') and current_user.is_authenticated
+        
+        # Si se está abriendo el modal o se ha seleccionado una sesión, cargar el historial de la base de datos
+        if trigger in ["chat-modal", "session-store"] and (modal_style.get("display") == "block" or trigger == "session-store"):
+            # Si el usuario está autenticado, usar su ID
+            if user_authenticated:
+                user_id = current_user.id
+                
+                # Obtener el ID de sesión del store de sesión o crear uno nuevo
+                session_id = session_store.get("session_id") if session_store else str(uuid.uuid4())
+                
+                # Cargar mensajes de la base de datos para este usuario y sesión
+                db_messages = db_utils.get_user_conversation_history(user_id, session_id)
+                
+                # Añadir timestamps si no existen
+                messages = []
+                for msg in db_messages:
+                    if "time" not in msg:
+                        msg["time"] = datetime.now().strftime("%H:%M")
+                    messages.append(msg)
+                
+                # Actualizar el store con los mensajes, el ID de sesión y el ID de usuario
+                conversation_data = {
+                    "messages": messages,
+                    "session_id": session_id,
+                    "user_id": user_id
+                }
+            else:
+                # Si no está autenticado, usar un ID de sesión temporal
+                session_id = conversation_data.get("session_id", str(uuid.uuid4()))
+                messages = conversation_data.get("messages", [])
+                
+                # Actualizar el store con el ID de sesión
+                conversation_data = {
+                    "messages": messages,
+                    "session_id": session_id
+                }
             
             # Actualizar la UI
             chat_history = messages_to_components(messages)
             return chat_history, "", conversation_data, ""
         
-        if not user_input or (not n_clicks and not n_submit) or trigger == "chat-modal":
+        if not user_input or (not n_clicks and not n_submit) or trigger in ["chat-modal", "session-store"]:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
         
-        # Obtener o crear un ID de sesión
+        # Obtener información de la sesión y usuario
         session_id = conversation_data.get("session_id", str(uuid.uuid4()))
+        user_id = conversation_data.get("user_id") if user_authenticated else None
         
         # Get current time for timestamp
         timestamp = datetime.now().strftime("%H:%M")
@@ -272,7 +300,10 @@ def register_callbacks(app):
         messages.append(user_message)
         
         # Guardar el mensaje del usuario en la base de datos
-        db_utils.save_message(session_id, "user", user_input)
+        if user_authenticated:
+            db_utils.save_message_with_user(user_id, session_id, "user", user_input)
+        else:
+            db_utils.save_message(session_id, "user", user_input)
         
         # Update the UI with the user message
         chat_history = messages_to_components(messages)
@@ -301,16 +332,26 @@ def register_callbacks(app):
             messages[-1]["time"] = datetime.now().strftime("%H:%M")
             
             # Guardar la respuesta del asistente en la base de datos
-            db_utils.save_message(session_id, "assistant", result.final_output)
+            if user_authenticated:
+                db_utils.save_message_with_user(user_id, session_id, "assistant", result.final_output)
+            else:
+                db_utils.save_message(session_id, "assistant", result.final_output)
             
             # Update the UI with both messages
             chat_history = messages_to_components(messages)
             
-            # Actualizar el store con los mensajes y el ID de sesión
-            conversation_data = {
-                "messages": messages,
-                "session_id": session_id
-            }
+            # Actualizar el store con los mensajes, el ID de sesión y el ID de usuario si está autenticado
+            if user_authenticated:
+                conversation_data = {
+                    "messages": messages,
+                    "session_id": session_id,
+                    "user_id": user_id
+                }
+            else:
+                conversation_data = {
+                    "messages": messages,
+                    "session_id": session_id
+                }
             
             return chat_history, "", conversation_data, ""
         except Exception as e:
@@ -323,18 +364,28 @@ def register_callbacks(app):
             messages.append(error_message)
             
             # Guardar el mensaje de error en la base de datos
-            db_utils.save_message(session_id, "assistant", error_message["content"])
+            if user_authenticated:
+                db_utils.save_message_with_user(user_id, session_id, "assistant", error_message["content"])
+            else:
+                db_utils.save_message(session_id, "assistant", error_message["content"])
             
             chat_history = messages_to_components(messages)
             
             # Actualizar el store con los mensajes y el ID de sesión
-            conversation_data = {
-                "messages": messages,
-                "session_id": session_id
-            }
+            if user_authenticated:
+                conversation_data = {
+                    "messages": messages,
+                    "session_id": session_id,
+                    "user_id": user_id
+                }
+            else:
+                conversation_data = {
+                    "messages": messages,
+                    "session_id": session_id
+                }
             
             return chat_history, "", conversation_data, ""
-    
+
     @app.callback(
         [Output("chat-history", "children", allow_duplicate=True),
          Output("conversation-store", "data", allow_duplicate=True)],
