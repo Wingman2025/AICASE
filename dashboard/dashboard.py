@@ -495,6 +495,8 @@ chatbot.register_callbacks(app)
 
 # Ejecutar la migración de usuarios automáticamente al iniciar la aplicación en Railway
 migrate_users_table_if_needed()
+# Ejecutar la migración de la tabla conversation_history para añadir la columna user_id si no existe
+db_utils.migrate_conversation_history_table()
 
 if __name__ == '__main__':
     # Use standard configuration for local development

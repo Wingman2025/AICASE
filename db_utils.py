@@ -803,3 +803,40 @@ def get_user_conversation_history(user_id, session_id):
     
     conn.close()
     return messages
+
+def migrate_conversation_history_table():
+    """
+    Verifica si la tabla conversation_history tiene la columna user_id y la añade si no existe.
+    Esta función debe ejecutarse al inicio de la aplicación en Railway.
+    """
+    if not IS_RAILWAY:
+        return  # Solo es necesario en Railway (PostgreSQL)
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Verificar si la columna user_id existe en PostgreSQL
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'conversation_history' 
+            AND column_name = 'user_id'
+        """)
+        
+        column_exists = cursor.fetchone()
+        
+        if not column_exists:
+            print("Añadiendo columna user_id a la tabla conversation_history en PostgreSQL...")
+            cursor.execute("ALTER TABLE conversation_history ADD COLUMN user_id TEXT")
+            conn.commit()
+            print("Columna user_id añadida correctamente a la tabla conversation_history")
+        else:
+            print("La columna user_id ya existe en la tabla conversation_history")
+            
+    except Exception as e:
+        print(f"Error al verificar/añadir la columna user_id: {str(e)}")
+    finally:
+        conn.close()
+
+migrate_conversation_history_table()
