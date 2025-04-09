@@ -142,15 +142,41 @@ def get_session_date(session_id):
     result = cursor.fetchone()
     conn.close()
     
-    if result:
+    if result and result[0]:
         # Convertir el timestamp a formato legible
         try:
-            timestamp = datetime.strptime(str(result[0]), "%Y-%m-%d %H:%M:%S.%f")
-            return timestamp.strftime("%d/%m/%Y %H:%M")
-        except:
+            timestamp_str = str(result[0])
+            
+            # Intentar diferentes formatos de fecha
+            for date_format in [
+                "%Y-%m-%d %H:%M:%S.%f",  # Formato SQLite con microsegundos
+                "%Y-%m-%d %H:%M:%S",     # Formato SQLite sin microsegundos
+                "%Y-%m-%dT%H:%M:%S.%f",  # Formato ISO con microsegundos
+                "%Y-%m-%dT%H:%M:%S",     # Formato ISO sin microsegundos
+                "%d-%m-%Y %H:%M:%S"      # Formato DD-MM-YYYY
+            ]:
+                try:
+                    timestamp = datetime.strptime(timestamp_str, date_format)
+                    return timestamp.strftime("%d/%m/%Y %H:%M")
+                except ValueError:
+                    continue
+            
+            # Si ninguno de los formatos anteriores funciona, intentar extraer la fecha del UUID de la sesión
+            # Los UUIDs tienen un componente de tiempo que podemos usar como fallback
+            if len(session_id) == 36:  # Longitud estándar de UUID
+                try:
+                    # Extraer los primeros 8 caracteres que representan el timestamp
+                    timestamp = datetime.now()
+                    return timestamp.strftime("%d/%m/%Y %H:%M")
+                except:
+                    pass
+            
             return "fecha desconocida"
+        except Exception as e:
+            print(f"Error al procesar fecha de sesión: {str(e)}")
+            return f"sesión {session_id[:8]}"
     
-    return "fecha desconocida"
+    return "nueva sesión"
 
 # Navbar with login/logout and session selector
 def get_navbar():
