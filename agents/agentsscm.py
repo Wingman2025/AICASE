@@ -121,17 +121,6 @@ def delete_all_data():
     """
     return db_utils.delete_all_data()
 
-@function_tool
-def delete_unused_tables():
-    """
-    Elimina las tablas no utilizadas de la base de datos (procurement, production, inventory, distribution),
-    dejando solo la tabla daily_data que es relevante para la aplicación.
-    
-    Returns:
-        Un mensaje indicando el éxito o error de la operación.
-    """
-    return db_utils.delete_unused_tables()
-
 # Create specialist agents
 production_planner = Agent(
     name="production_planner",
