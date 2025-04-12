@@ -9,7 +9,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 import db_utils
-from agents import Agent, Runner, function_tool
+from openai.agents import Agent, Runner, function_tool
 from typing import Optional, List, Dict, Any
 
 @function_tool

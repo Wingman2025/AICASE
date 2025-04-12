@@ -10,13 +10,21 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State
 from flask_login import current_user
 
+# Add the project root to the Python path
+import sys
+import os
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)  # Add the current directory to the path
 
+# Add the agents directory to the Python path
+agents_dir = os.path.join(current_dir, 'agents')
+sys.path.append(agents_dir)
+
 # Import the modules using the correct path
-from agents.agentsscm import triage_agent
-from agents import Runner
+import agentsscm
+from agentsscm import triage_agent
+from openai.agents import Runner
 import db_utils
 
 # Estilos globales que pueden ser modificados desde el dashboard
