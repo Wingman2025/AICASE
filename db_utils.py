@@ -57,7 +57,8 @@ def parse_date(date_str: str) -> str:
         - "YYYY-MM-DD" for PostgreSQL
         - "DD-MM-YYYY" for SQLite
     """
-    parsed = dateparser.parse(date_str)
+    # Explicitly specify DD-MM-YYYY format as the preferred format
+    parsed = dateparser.parse(date_str, date_formats=['%d-%m-%Y', '%d/%m/%Y'], settings={'PREFER_DAY_OF_MONTH': 'first'})
     if not parsed:
         raise ValueError(f"No se pudo interpretar la fecha: {date_str}")
 
