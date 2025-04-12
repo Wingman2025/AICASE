@@ -22,9 +22,10 @@ agents_dir = os.path.join(current_dir, 'agents')
 sys.path.append(agents_dir)
 
 # Import the modules using the correct path
+
 import agentsscm
 from agentsscm import triage_agent
-from openai.agents import Runner
+from agents import Runner
 import db_utils
 
 # Estilos globales que pueden ser modificados desde el dashboard
