@@ -1,13 +1,15 @@
 import os
 import sqlite3
-import psycopg2
-import pandas as pd
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
-import numpy as np
 import traceback
 import uuid
+from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional
+
+import dateparser
+import numpy as np
+import psycopg2
+from config import IS_RAILWAY
+from dotenv import load_dotenv
 
 # Cargar variables de entorno
 load_dotenv()
@@ -45,6 +47,22 @@ def get_connection():
         conn = sqlite3.connect(db_path)
     
     return conn
+
+
+def parse_date(date_str: str) -> str:
+    """
+    Parses a date string in any format or natural language and returns it
+    in the correct format for the database.
+
+    Returns:
+        - "YYYY-MM-DD" for PostgreSQL
+        - "DD-MM-YYYY" for SQLite
+    """
+    parsed = dateparser.parse(date_str)
+    if not parsed:
+        raise ValueError(f"No se pudo interpretar la fecha: {date_str}")
+
+    return parsed.strftime("%Y-%m-%d") if IS_RAILWAY else parsed.strftime("%d-%m-%Y")
 
 def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
     """
@@ -300,126 +318,93 @@ def generate_future_data(start_date: str, days: int) -> str:
     Generate random data for future dates and save to database.
     
     Args:
-        start_date: Start date in DD-MM-YYYY format
+        start_date: Start date in any format or natural language
         days: Number of days to generate data for
         
     Returns:
         Success or error message
     """
     try:
-        # Parse start date
+        # Parse start date using parse_date function
         print(f"Generando datos desde {start_date} para {days} días")
-        start_date_obj = datetime.strptime(start_date, "%d-%m-%Y")
-        
-        # Generate random data
-        dates = [start_date_obj + timedelta(days=i) for i in range(days)]
-        demand = np.random.randint(50, 150, size=days)
-        production_plan = np.random.randint(50, 150, size=days)
-        
-        # Calculate inventory as production_plan - demand
-        inventory = [production_plan[i] - demand[i] for i in range(days)]
-        
-        # Format dates for database
-        if IS_RAILWAY:
-            # PostgreSQL espera el formato YYYY-MM-DD
-            formatted_dates = [date.strftime("%Y-%m-%d") for date in dates]
-        else:
-            # SQLite puede manejar el formato DD-MM-YYYY
-            formatted_dates = [date.strftime("%d-%m-%Y") for date in dates]
-        print(f"Fechas generadas: {formatted_dates}")
-        
-        # Connect to database
-        conn = get_connection()
-        cursor = conn.cursor()
-        
-        # Verificar que la tabla existe
-        if IS_RAILWAY:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS daily_data (
-                    id SERIAL PRIMARY KEY,
-                    date TEXT NOT NULL UNIQUE,
-                    demand INTEGER,
-                    production_plan INTEGER,
-                    inventory INTEGER
-                )
-            """)
-        else:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS daily_data (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    date TEXT NOT NULL UNIQUE,
-                    demand INTEGER,
-                    production_plan INTEGER,
-                    inventory INTEGER
-                )
-            """)
-        
-        # Insert data for each date
-        inserted_count = 0
-        updated_count = 0
-        
-        for i in range(days):
-            # Check if date already exists
-            if IS_RAILWAY:
-                cursor.execute("SELECT COUNT(*) FROM daily_data WHERE date = %s", (formatted_dates[i],))
-            else:
-                cursor.execute("SELECT COUNT(*) FROM daily_data WHERE date = ?", (formatted_dates[i],))
-                
-            exists = cursor.fetchone()[0] > 0
+        try:
+            # First parse the date to get it in the right format
+            formatted_start_date = parse_date(start_date)
             
-            if exists:
-                # Update existing record
-                if IS_RAILWAY:
-                    cursor.execute(
-                        "UPDATE daily_data SET demand = %s, production_plan = %s, inventory = %s WHERE date = %s",
-                        (int(demand[i]), int(production_plan[i]), int(inventory[i]), formatted_dates[i])
-                    )
-                else:
-                    cursor.execute(
-                        "UPDATE daily_data SET demand = ?, production_plan = ?, inventory = ? WHERE date = ?",
-                        (int(demand[i]), int(production_plan[i]), int(inventory[i]), formatted_dates[i])
-                    )
-                updated_count += 1
-                print(f"Actualizado registro para {formatted_dates[i]}: demanda={int(demand[i])}, producción={int(production_plan[i])}, inventario={int(inventory[i])}")
+            # Then convert it to a datetime object for date arithmetic
+            # The format depends on whether we're using PostgreSQL or SQLite
+            if IS_RAILWAY:
+                start_date_obj = datetime.strptime(formatted_start_date, "%Y-%m-%d")
             else:
-                # Insert new record
-                try:
+                start_date_obj = datetime.strptime(formatted_start_date, "%d-%m-%Y")
+            
+            # Generate random data
+            dates = [start_date_obj + timedelta(days=i) for i in range(days)]
+            demand = np.random.randint(50, 150, size=days)
+            production_plan = np.random.randint(50, 150, size=days)
+            
+            # Calculate inventory as production_plan - demand
+            inventory = [production_plan[i] - demand[i] for i in range(days)]
+            
+            # Format dates for database
+            if IS_RAILWAY:
+                # PostgreSQL espera el formato YYYY-MM-DD
+                formatted_dates = [date.strftime("%Y-%m-%d") for date in dates]
+            else:
+                # SQLite puede manejar el formato DD-MM-YYYY
+                formatted_dates = [date.strftime("%d-%m-%Y") for date in dates]
+            print(f"Fechas generadas: {formatted_dates}")
+            
+            # Connect to database
+            conn = get_connection()
+            cursor = conn.cursor()
+            
+            # Insert data into database
+            for i in range(days):
+                # Check if data already exists for this date
+                if IS_RAILWAY:
+                    cursor.execute("SELECT COUNT(*) FROM daily_data WHERE date = %s", (formatted_dates[i],))
+                else:
+                    cursor.execute("SELECT COUNT(*) FROM daily_data WHERE date = ?", (formatted_dates[i],))
+                
+                count = cursor.fetchone()[0]
+                
+                if count > 0:
+                    # Update existing record
+                    if IS_RAILWAY:
+                        cursor.execute(
+                            "UPDATE daily_data SET demand = %s, production_plan = %s, inventory = %s WHERE date = %s",
+                            (demand[i], production_plan[i], inventory[i], formatted_dates[i])
+                        )
+                    else:
+                        cursor.execute(
+                            "UPDATE daily_data SET demand = ?, production_plan = ?, inventory = ? WHERE date = ?",
+                            (demand[i], production_plan[i], inventory[i], formatted_dates[i])
+                        )
+                else:
+                    # Insert new record
                     if IS_RAILWAY:
                         cursor.execute(
                             "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (%s, %s, %s, %s)",
-                            (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
+                            (formatted_dates[i], demand[i], production_plan[i], inventory[i])
                         )
                     else:
                         cursor.execute(
                             "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (?, ?, ?, ?)",
-                            (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
+                            (formatted_dates[i], demand[i], production_plan[i], inventory[i])
                         )
-                    inserted_count += 1
-                    print(f"Insertado nuevo registro para {formatted_dates[i]}: demanda={int(demand[i])}, producción={int(production_plan[i])}, inventario={int(inventory[i])}")
-                except Exception as e:
-                    print(f"Error al insertar registro para {formatted_dates[i]}: {str(e)}")
-        
-        # Verificar que los datos se hayan guardado correctamente
-        try:
-            if IS_RAILWAY:
-                cursor.execute("SELECT date, demand FROM daily_data WHERE date = %s", (formatted_dates[0],))
-            else:
-                cursor.execute("SELECT date, demand FROM daily_data WHERE date = ?", (formatted_dates[0],))
             
-            first_record = cursor.fetchone()
-            print(f"Verificación del primer registro: {first_record}")
-        except Exception as e:
-            print(f"Error al verificar el primer registro: {str(e)}")
-        
-        conn.commit()
-        conn.close()
-        
-        return f"Successfully generated data for {days} days starting from {start_date}. Inserted {inserted_count} new records and updated {updated_count} existing records."
-    
+            conn.commit()
+            conn.close()
+            
+            return f"Generados datos aleatorios para {days} días a partir de {start_date}."
+        except ValueError as e:
+            return f"Error with date format: {str(e)}"
     except Exception as e:
-        print(f"Error en generate_future_data: {str(e)}")
-        traceback.print_exc()  # Imprimir el traceback completo para depuración
-        return f"Error generating future data: {str(e)}"
+        traceback_str = traceback.format_exc()
+        print(f"Error: {str(e)}")
+        print(traceback_str)
+        return f"Error generando datos: {str(e)}"
 
 def delete_all_data() -> str:
     """

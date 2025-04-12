@@ -10,71 +10,78 @@ sys.path.append(parent_dir)
 
 import db_utils
 from agents import Agent, Runner, function_tool
+from typing import Optional, List, Dict, Any
 
 @function_tool
-def get_daily_data(date: str = None):
+def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Get daily supply chain data from the database.
-    
+
     Args:
-        date: Optional date string in DD-MM-YYYY format (e.g., "03-04-2025").
-             If provided, only data for that date is returned.
-             
+        date: Optional date string provided in natural language or in a common format
+              (e.g., "03-04-2025", "2025-04-03", "today", "yesterday").
+
     Returns:
-        A list of dictionaries containing the daily data or an informative message.
+        A list of dictionaries containing the daily data, or an informative message
+        if no data is found.
     """
-    # Asegurarse de que la fecha esté en formato DD-MM-YYYY
-    if date and "-" in date:
-        # Si la fecha está en formato YYYY-MM-DD, convertirla a DD-MM-YYYY
+    # Si se proporciona una fecha, se procesa y se formatea correctamente
+    if date:
         try:
-            parts = date.split("-")
-            if len(parts) == 3 and len(parts[0]) == 4:  # Formato YYYY-MM-DD
-                date = f"{parts[2]}-{parts[1]}-{parts[0]}"
-        except Exception:
-            pass  # Si hay algún error, usar la fecha tal como está
-    
-    result = db_utils.get_daily_data(date)
-    
-    # Si se especificó una fecha pero no se encontraron datos, obtener fechas disponibles
-    if date and not result:
-        # Obtener todas las fechas disponibles
-        all_dates = [item['date'] for item in db_utils.get_daily_data()]
+            # Esta función se encarga de interpretar la fecha y devolver el formato adecuado:
+            # Para PostgreSQL (Railway) será "YYYY-MM-DD"
+            # Para SQLite, "DD-MM-YYYY"
+            formatted_date = db_utils.parse_date(date)
+        except ValueError as e:
+            return {"error": str(e)}
+    else:
+        formatted_date = None
+
+    # Obtener los datos de la base de datos usando la fecha ya formateada
+    result = db_utils.get_daily_data(formatted_date)
+
+    # Si se especificó una fecha pero no se encontraron datos, se devuelve un mensaje informativo
+    if formatted_date and not result:
+        available = [item['date'] for item in db_utils.get_daily_data()]
         return {
-            "error": f"No se encontraron datos para la fecha {date}",
-            "available_dates": all_dates,
+            "error": f"No se encontraron datos para la fecha {formatted_date}",
+            "available_dates": available,
             "message": "Estas son las fechas disponibles en la base de datos. Por favor, selecciona una de ellas."
         }
-    
+
     return result
 
 @function_tool
-def update_production_plan(date: str, production_plan: int):
+def update_production_plan(date: str, production_plan: int) -> Dict[str, Any]:
     """
     Update the production plan for a specific date.
-    
+
     Args:
-        date: Date string in DD-MM-YYYY format (e.g., "03-04-2025").
+        date: A date string expressed in natural language or in a common format
+              (e.g., "today", "03-04-2025", "2025-04-03").
         production_plan: New production plan value (integer).
-        
+
     Returns:
         A message indicating success or failure.
     """
-    # Asegurarse de que la fecha esté en formato DD-MM-YYYY
-    if date and "-" in date:
-        # Si la fecha está en formato YYYY-MM-DD, convertirla a DD-MM-YYYY
-        try:
-            parts = date.split("-")
-            if len(parts) == 3 and len(parts[0]) == 4:  # Formato YYYY-MM-DD
-                date = f"{parts[2]}-{parts[1]}-{parts[0]}"
-        except Exception:
-            pass  # Si hay algún error, usar la fecha tal como está
-    
-    # Verificar primero si existen datos para esta fecha
-    data = db_utils.get_daily_data(date)
+    # Convertir la fecha al formato adecuado para la base de datos usando parse_date
+    try:
+        formatted_date = db_utils.parse_date(date)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    # Verificar que existan datos para la fecha especificada
+    data = db_utils.get_daily_data(formatted_date)
     if not data:
-        return f"No se encontraron datos para la fecha {date}. Por favor, verifica que la fecha existe en la base de datos."
-    
-    return db_utils.update_production_plan(date, production_plan)
+        return {
+            "error": f"No se encontraron datos para la fecha {formatted_date}.",
+            "message": "Verifica que la fecha exista en la base de datos."
+        }
+
+    # Llamar a la función de actualización en db_utils
+    result_message = db_utils.update_production_plan(formatted_date, production_plan)
+    return {"message": result_message}
+
 
 @function_tool
 def get_production_summary():
@@ -91,11 +98,35 @@ def get_demand_summary():
     return db_utils.get_demand_summary()
 
 @function_tool
-def update_demand(date: str, demand: int):
+def update_demand(date: str, demand: int) -> Dict[str, Any]:
     """
     Update the demand for a specific date.
+
+    Args:
+        date: A date string expressed in natural language or in a common format
+              (e.g., "today", "03-04-2025", "2025-04-03").
+        demand: New demand value (integer).
+
+    Returns:
+        A message indicating success or failure.
     """
-    return db_utils.update_demand(date, demand)
+    # Convertir la fecha al formato adecuado para la base de datos usando parse_date
+    try:
+        formatted_date = db_utils.parse_date(date)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    # Verificar que existan datos para la fecha especificada
+    data = db_utils.get_daily_data(formatted_date)
+    if not data:
+        return {
+            "error": f"No se encontraron datos para la fecha {formatted_date}.",
+            "message": "Verifica que la fecha exista en la base de datos."
+        }
+
+    # Llamar a la función de actualización en db_utils
+    result_message = db_utils.update_demand(formatted_date, demand)
+    return {"message": result_message}
 
 @function_tool
 def get_inventory_summary():
@@ -105,11 +136,27 @@ def get_inventory_summary():
     return db_utils.get_inventory_summary()
 
 @function_tool
-def generate_future_data(start_date: str, days: int):
+def generate_future_data(start_date: str, days: int) -> Dict[str, Any]:
     """
     Generate random data for future dates and save to database.
+    
+    Args:
+        start_date: A date string expressed in natural language or in a common format
+                   (e.g., "today", "03-04-2025", "2025-04-03").
+        days: Number of days to generate data for (integer).
+        
+    Returns:
+        A message indicating success or failure.
     """
-    return db_utils.generate_future_data(start_date, days)
+    # Convertir la fecha al formato adecuado para la base de datos usando parse_date
+    try:
+        formatted_start_date = db_utils.parse_date(start_date)
+    except ValueError as e:
+        return {"error": str(e)}
+        
+    # Llamar a la función de generación en db_utils
+    result_message = db_utils.generate_future_data(formatted_start_date, days)
+    return {"message": result_message}
 
 @function_tool
 def delete_all_data():
@@ -133,7 +180,8 @@ production_planner = Agent(
       4. Analyzing the relationship between demand and inventory.
       5. Updating production plan based on inventory levels.
     Always explain your reasoning and be concise.
-    
+    When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
+    If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
     IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,

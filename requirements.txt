@@ -29,3 +29,6 @@ Flask==2.2.2
 
 # Fix Werkzeug version to avoid import issues (Werkzeug>=2.2.2,<3.0.0)
 Werkzeug>=2.2.2,<3.0.0
+
+dateparser~=1.2.1
+config~=0.5.1
