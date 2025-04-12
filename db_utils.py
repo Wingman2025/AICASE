@@ -8,7 +8,6 @@ from typing import List, Dict, Any, Optional
 import dateparser
 import numpy as np
 import psycopg2
-from config import IS_RAILWAY
 from dotenv import load_dotenv
 
 # Cargar variables de entorno
