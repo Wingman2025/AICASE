@@ -1,22 +1,25 @@
-import dash
-from dash import html, dcc, callback, Input, Output, State
-import dash_bootstrap_components as dbc
 import asyncio
-from datetime import datetime
-import sys
 import os
 import re
+import sys
 import uuid
+from datetime import datetime
+
+import dash
+import dash_bootstrap_components as dbc
+from dash import html, dcc, Input, Output, State
 from flask_login import current_user
 
 # Add the project root to the Python path
+import sys
+import os
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
-agents_dir = os.path.join(current_dir, 'agents')
-sys.path.insert(0, agents_dir)
+sys.path.append(current_dir)  # Add the current directory to the path
 
 # Import the modules using the correct path
-import agentsscm
-from agentsscm import triage_agent, Runner
+from agents.agentsscm import triage_agent
+from agents import Runner
 import db_utils
 
 # Estilos globales que pueden ser modificados desde el dashboard

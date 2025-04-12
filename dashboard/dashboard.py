@@ -1,12 +1,12 @@
-import dash
-from dash import dcc, html
-from dash.dependencies import Input, Output, State
-import dash_bootstrap_components as dbc
+import os
 import sqlite3
 import sys
-import os
 from datetime import datetime
-import uuid
+
+import dash
+import dash_bootstrap_components as dbc
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
 from flask_login import UserMixin, login_user, current_user, LoginManager, logout_user
 
 # Try to import Railway-specific packages, but continue if not available
@@ -17,6 +17,8 @@ try:
     load_dotenv()
     RAILWAY_DEPLOYMENT = True
 except ImportError:
+    dj_database_url = None
+    load_dotenv = None
     RAILWAY_DEPLOYMENT = False
 
 # Add the project root to the Python path
@@ -152,6 +154,7 @@ if RAILWAY_DEPLOYMENT and 'RAILWAY_STATIC_URL' in os.environ:
             os.makedirs(assets_path, exist_ok=True)
             print(f"Directorio de assets creado en: {assets_path}")
     except ImportError as e:
+        WhiteNoise = None
         print(f"Error al importar WhiteNoise: {str(e)}")
     except Exception as e:
         print(f"Error al configurar WhiteNoise: {str(e)}")
