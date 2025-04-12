@@ -79,16 +79,9 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
         cursor = conn.cursor()
         
         if date:
-            # Asegurarse de que la fecha esté en el formato correcto DD-MM-YYYY
+            # Use the parse_date function to handle any date format
             try:
-                # Intentar parsear la fecha para validarla
-                date_obj = datetime.strptime(date, "%d-%m-%Y")
-                if IS_RAILWAY:
-                    # PostgreSQL espera el formato YYYY-MM-DD
-                    formatted_date = date_obj.strftime("%Y-%m-%d")
-                else:
-                    # SQLite puede manejar el formato DD-MM-YYYY
-                    formatted_date = date_obj.strftime("%d-%m-%Y")
+                formatted_date = parse_date(date)
                 print(f"Buscando datos para la fecha: {formatted_date}")
                 
                 if IS_RAILWAY:
@@ -96,8 +89,8 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
                 else:
                     query = "SELECT date, demand, inventory, production_plan FROM daily_data WHERE date = ?"
                 cursor.execute(query, (formatted_date,))
-            except ValueError:
-                print(f"Formato de fecha inválido: {date}. Debe ser DD-MM-YYYY")
+            except ValueError as e:
+                print(f"Error al procesar la fecha: {e}")
                 return []
         else:
             query = "SELECT date, demand, inventory, production_plan FROM daily_data ORDER BY date"
