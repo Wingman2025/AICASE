@@ -10,9 +10,6 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State
 from flask_login import current_user
 
-# Add the project root to the Python path
-import sys
-import os
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)  # Add the current directory to the path
