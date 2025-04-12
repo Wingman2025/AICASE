@@ -151,18 +151,18 @@ def update_production_plan(date: str, production_plan: int) -> str:
         demand = result[0]
         
         # Calculate new inventory value
-        new_inventory = production_plan - demand
+        new_inventory = int(production_plan) - int(demand)
         
         # Update both production_plan and inventory
         if IS_RAILWAY:
             cursor.execute(
                 "UPDATE daily_data SET production_plan = %s, inventory = %s WHERE date = %s", 
-                (production_plan, new_inventory, date)
+                (int(production_plan), int(new_inventory), date)
             )
         else:
             cursor.execute(
                 "UPDATE daily_data SET production_plan = ?, inventory = ? WHERE date = ?", 
-                (production_plan, new_inventory, date)
+                (int(production_plan), int(new_inventory), date)
             )
         
         conn.commit()
@@ -204,18 +204,18 @@ def update_demand(date: str, demand: int) -> str:
         production_plan = result[0]
         
         # Calculate new inventory value
-        new_inventory = production_plan - demand
+        new_inventory = int(production_plan) - int(demand)
         
         # Update both demand and inventory
         if IS_RAILWAY:
             cursor.execute(
                 "UPDATE daily_data SET demand = %s, inventory = %s WHERE date = %s", 
-                (demand, new_inventory, date)
+                (int(demand), int(new_inventory), date)
             )
         else:
             cursor.execute(
                 "UPDATE daily_data SET demand = ?, inventory = ? WHERE date = ?", 
-                (demand, new_inventory, date)
+                (int(demand), int(new_inventory), date)
             )
         
         conn.commit()
@@ -248,10 +248,10 @@ def get_production_summary():
         total, avg, min_val, max_val = cursor.fetchone()
         
         return {
-            "total_production": total,
-            "average_production": round(avg, 2) if avg else 0,
-            "min_production": min_val,
-            "max_production": max_val
+            "total_production": int(total) if total is not None else 0,
+            "average_production": round(float(avg), 2) if avg is not None else 0,
+            "min_production": int(min_val) if min_val is not None else 0,
+            "max_production": int(max_val) if max_val is not None else 0
         }
     finally:
         conn.close()
@@ -276,10 +276,10 @@ def get_demand_summary():
         total, avg, min_val, max_val = cursor.fetchone()
         
         return {
-            "total_demand": total,
-            "average_demand": round(avg, 2) if avg else 0,
-            "min_demand": min_val,
-            "max_demand": max_val
+            "total_demand": int(total) if total is not None else 0,
+            "average_demand": round(float(avg), 2) if avg is not None else 0,
+            "min_demand": int(min_val) if min_val is not None else 0,
+            "max_demand": int(max_val) if max_val is not None else 0
         }
     finally:
         conn.close()
@@ -304,10 +304,10 @@ def get_inventory_summary():
         total, avg, min_val, max_val = cursor.fetchone()
         
         return {
-            "total_inventory": total,
-            "average_inventory": round(avg, 2) if avg else 0,
-            "min_inventory": min_val,
-            "max_inventory": max_val
+            "total_inventory": int(total) if total is not None else 0,
+            "average_inventory": round(float(avg), 2) if avg is not None else 0,
+            "min_inventory": int(min_val) if min_val is not None else 0,
+            "max_inventory": int(max_val) if max_val is not None else 0
         }
     finally:
         conn.close()
@@ -343,7 +343,7 @@ def generate_future_data(start_date: str, days: int) -> str:
             production_plan = np.random.randint(50, 150, size=days)
             
             # Calculate inventory as production_plan - demand
-            inventory = [production_plan[i] - demand[i] for i in range(days)]
+            inventory = [int(production_plan[i]) - int(demand[i]) for i in range(days)]
             
             # Format dates for database
             if IS_RAILWAY:
@@ -373,24 +373,24 @@ def generate_future_data(start_date: str, days: int) -> str:
                     if IS_RAILWAY:
                         cursor.execute(
                             "UPDATE daily_data SET demand = %s, production_plan = %s, inventory = %s WHERE date = %s",
-                            (demand[i], production_plan[i], inventory[i], formatted_dates[i])
+                            (int(demand[i]), int(production_plan[i]), int(inventory[i]), formatted_dates[i])
                         )
                     else:
                         cursor.execute(
                             "UPDATE daily_data SET demand = ?, production_plan = ?, inventory = ? WHERE date = ?",
-                            (demand[i], production_plan[i], inventory[i], formatted_dates[i])
+                            (int(demand[i]), int(production_plan[i]), int(inventory[i]), formatted_dates[i])
                         )
                 else:
                     # Insert new record
                     if IS_RAILWAY:
                         cursor.execute(
                             "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (%s, %s, %s, %s)",
-                            (formatted_dates[i], demand[i], production_plan[i], inventory[i])
+                            (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
                         )
                     else:
                         cursor.execute(
                             "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (?, ?, ?, ?)",
-                            (formatted_dates[i], demand[i], production_plan[i], inventory[i])
+                            (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
                         )
             
             conn.commit()
