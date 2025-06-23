@@ -169,7 +169,7 @@ def delete_all_data():
     return db_utils.delete_all_data()
 
 # Create specialist agents
-production_planner = Agent(
+Production_planner_Assistant = Agent(
     name="production_planner",
     instructions="""
     You are a production planning specialist for a supply chain management system.
@@ -179,26 +179,25 @@ production_planner = Agent(
       3. Providing summaries and insights about production patterns.
       4. Analyzing the relationship between demand and inventory.
       5. Updating production plan based on inventory levels.
-    Always explain your reasoning and be concise.
-    When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
-    If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
-    IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+      6. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
+      7. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
+      8. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
     tools=[get_daily_data, update_production_plan, get_production_summary, get_inventory_summary]
 )
 
-demand_planner = Agent(
+Demand_planner_Assistant = Agent(
     name="demand_planner",
     instructions="""
     You are a demand planning specialist for a supply chain management system.
     Your responsibilities include:
       1. Getting daily data to understand current demand.
       2. Providing summaries and insights about demand patterns.
-    Always explain your reasoning and be concise.
-    
-    IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+      3. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
+      4. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
+      5. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
