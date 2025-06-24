@@ -402,7 +402,7 @@ def generate_future_data(start_date: str, days: int) -> str:
 def delete_all_data() -> str:
     """
     Elimina todos los datos de la tabla daily_data para comenzar desde cero.
-    
+
     Returns:
         Mensaje indicando el éxito o error de la operación.
     """
@@ -484,8 +484,8 @@ def get_user_sessions(user_id):
     Returns:
         list: Lista de IDs de sesión
     """
+    conn = get_connection()
     try:
-        conn = get_connection()
         cursor = conn.cursor()
         
         if IS_RAILWAY:
@@ -505,7 +505,6 @@ def get_user_sessions(user_id):
                 if "column \"user_id\" does not exist" in str(e):
                     # Si la columna no existe, ejecutar la migración y retornar una lista vacía
                     print("La columna user_id no existe. Ejecutando migración...")
-                    conn.close()
                     migrate_conversation_history_table()
                     return []
                 else:
@@ -518,12 +517,13 @@ def get_user_sessions(user_id):
             )
         
         sessions = [row[0] for row in cursor.fetchall()]
-        conn.close()
         return sessions
     except Exception as e:
         print(f"Error al obtener sesiones del usuario: {str(e)}")
         traceback.print_exc()  # Imprimir el traceback completo para depuración
         return []
+    finally:
+        conn.close()
 
 def get_or_create_user(username):
     """
