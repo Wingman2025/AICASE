@@ -62,12 +62,13 @@ The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io
      – Data generation / purge ⇒ `data_generator`.
 
 2. **Production Planner (`production_planner`)**
-   • Tools:  
-     – `get_daily_data`  
-     – `update_production_plan`  
-     – `get_production_summary`  
-     – `get_inventory_summary`  
-   • Responsibilities: analyse production vs demand, adjust production plans, report inventory impact.
+   • Tools:
+      – `get_daily_data`
+      – `update_production_plan`
+      – `get_production_summary`
+      – `get_inventory_summary`
+      – `get_stockouts`
+   • Responsibilities: analyse production vs demand, adjust production plans, report inventory impact, and retrieve stockout days.
 
 3. **Demand Planner (`demand_planner`)**
    • Tools:  
@@ -93,6 +94,7 @@ The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io
 | `get_production_summary()` | Aggregated stats on production. |
 | `get_demand_summary()` | Aggregated stats on demand. |
 | `get_inventory_summary()` | Aggregated stats on inventory. |
+| `get_stockouts()` | Retrieve all rows where inventory is zero or negative. |
 | `generate_future_data(start_date, days)` | Populates future records with random realistic values. |
 | `delete_all_data()` | Hard reset of the database. |
 
