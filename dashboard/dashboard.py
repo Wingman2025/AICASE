@@ -5,7 +5,7 @@ from datetime import datetime
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import dcc, html
+from dash import dcc, html, dash_table
 from dash.dependencies import Input, Output, State
 from flask_login import UserMixin, login_user, current_user, LoginManager, logout_user
 
@@ -378,6 +378,45 @@ def get_db_connection():
     db_path = os.path.join(data_dir, 'supply_chain.db')
     return sqlite3.connect(db_path)
 
+
+def create_metric_cards():
+    """Return a row of cards showing key metrics."""
+    prod = db_utils.get_production_summary()
+    demand = db_utils.get_demand_summary()
+    inv = db_utils.get_inventory_summary()
+
+    cards = dbc.Row([
+        dbc.Col(
+            dbc.Card(
+                dbc.CardBody([
+                    html.H6("Total Production", className="card-title"),
+                    html.Div(prod["total_production"], className="metric-number"),
+                ])
+            ),
+            md=4,
+        ),
+        dbc.Col(
+            dbc.Card(
+                dbc.CardBody([
+                    html.H6("Total Demand", className="card-title"),
+                    html.Div(demand["total_demand"], className="metric-number"),
+                ])
+            ),
+            md=4,
+        ),
+        dbc.Col(
+            dbc.Card(
+                dbc.CardBody([
+                    html.H6("Avg Inventory", className="card-title"),
+                    html.Div(inv["average_inventory"], className="metric-number"),
+                ])
+            ),
+            md=4,
+        ),
+    ], className="mb-4")
+
+    return cards
+
 # Callback to update content based on selected tab
 @app.callback(Output('tabs-content-example', 'children'),
               [Input('tabs-example', 'value'), Input('refresh-button', 'n_clicks')])
@@ -386,21 +425,27 @@ def render_content(tab, n_clicks):
     try:
         cursor = conn.cursor()
         if tab == 'tab-1':
-            # Modified SQL query to specify column order with inventory at the end
             cursor.execute("SELECT date, demand, production_plan, inventory FROM daily_data")
             data = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
+            records = [dict(zip(columns, row)) for row in data]
+
             return html.Div([
+                create_metric_cards(),
                 html.H3('Daily Data', style={'textAlign': 'center', 'color': '#4CAF50'}),
-                html.Table([
-                    html.Thead(html.Tr([html.Th(col, style={'padding': '10px', 'border': '1px solid #ddd', 'backgroundColor': '#f2f2f2'}) for col in columns])),
-                    html.Tbody([
-                        html.Tr([
-                            html.Td(cell, style={'padding': '10px', 'border': '1px solid #ddd', 'textAlign': 'center', 'color': 'blue' if col == 'production_plan' else 'black'})
-                            for col, cell in zip(columns, row)
-                        ]) for row in data
-                    ])
-                ], style={'width': '100%', 'borderCollapse': 'collapse', 'margin': '20px auto'}),
+                dash_table.DataTable(
+                    id='daily-table',
+                    columns=[{"name": col, "id": col} for col in columns],
+                    data=records,
+                    className='datatable-cell',
+                    style_cell={"textAlign": "center"},
+                    style_data_conditional=[
+                        {
+                            "if": {"column_id": "production_plan"},
+                            "color": "blue",
+                        }
+                    ],
+                ),
             ])
     finally:
         conn.close()
