@@ -321,6 +321,27 @@ def get_stockouts() -> List[Dict[str, Any]]:
     finally:
         conn.close()
 
+def propose_production_plan_for_stockouts() -> List[Dict[str, Any]]:
+    """Propose a production plan equal to demand for each stockout day."""
+    stockouts = get_stockouts()
+    proposals = []
+    for row in stockouts:
+        date = row["date"]
+        demand = int(row["demand"])
+        current_plan = int(row["production_plan"])
+        proposed_plan = demand
+        resulting_inventory = proposed_plan - demand
+        proposals.append(
+            {
+                "date": date,
+                "demand": demand,
+                "current_production_plan": current_plan,
+                "proposed_production_plan": proposed_plan,
+                "resulting_inventory": resulting_inventory,
+            }
+        )
+    return proposals
+
 def generate_future_data(start_date: str, days: int) -> str:
     """
     Generate random data for future dates and save to database.
