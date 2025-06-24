@@ -68,7 +68,8 @@ The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io
       – `get_production_summary`
       – `get_inventory_summary`
       – `get_stockouts`
-   • Responsibilities: analyse production vs demand, adjust production plans, report inventory impact, and retrieve stockout days.
+      – `propose_production_plan_for_stockouts`
+   • Responsibilities: analyse production vs demand, adjust production plans, propose fixes for stockouts, and report inventory impact.
 
 3. **Demand Planner (`demand_planner`)**
    • Tools:  
@@ -95,6 +96,7 @@ The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io
 | `get_demand_summary()` | Aggregated stats on demand. |
 | `get_inventory_summary()` | Aggregated stats on inventory. |
 | `get_stockouts()` | Retrieve all rows where inventory is zero or negative. |
+| `propose_production_plan_for_stockouts()` | Suggest production plans equal to demand on stockout days. |
 | `generate_future_data(start_date, days)` | Populates future records with random realistic values. |
 | `delete_all_data()` | Hard reset of the database. |
 

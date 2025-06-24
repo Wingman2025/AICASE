@@ -141,6 +141,11 @@ def get_stockouts():
     return db_utils.get_stockouts()
 
 @function_tool
+def propose_production_plan_for_stockouts():
+    """Suggest a production plan equal to demand for each stockout day."""
+    return db_utils.propose_production_plan_for_stockouts()
+
+@function_tool
 def generate_future_data(start_date: str, days: int) -> Dict[str, Any]:
     """
     Generate random data for future dates and save to database.
@@ -185,13 +190,14 @@ production_planner = Agent(
       4. Analyzing the relationship between demand and inventory.
       5. Updating production plan based on inventory levels.
       6. Retrieving all stockouts (days where inventory is zero or negative).
-      7. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
-      8. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
-      9. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+      7. Proposing a new production plan for those stockouts by matching the day's demand.
+      8. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
+      9. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
+     10. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
-    tools=[get_daily_data, update_production_plan, get_production_summary, get_inventory_summary, get_stockouts]
+    tools=[get_daily_data, update_production_plan, get_production_summary, get_inventory_summary, get_stockouts, propose_production_plan_for_stockouts]
 )
 
 demand_planner = Agent(
