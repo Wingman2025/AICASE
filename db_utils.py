@@ -844,5 +844,3 @@ def migrate_conversation_history_table():
         print(f"Error al verificar/añadir la columna user_id: {str(e)}")
     finally:
         conn.close()
-
-migrate_conversation_history_table()
