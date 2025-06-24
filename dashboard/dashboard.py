@@ -5,7 +5,7 @@ from datetime import datetime
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import dcc, html
+from dash import dcc, html, dash_table
 from dash.dependencies import Input, Output, State
 from flask_login import UserMixin, login_user, current_user, LoginManager, logout_user
 
@@ -390,17 +390,15 @@ def render_content(tab, n_clicks):
             cursor.execute("SELECT date, demand, production_plan, inventory FROM daily_data")
             data = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
+            data_dicts = [dict(zip(columns, row)) for row in data]
             return html.Div([
                 html.H3('Daily Data', style={'textAlign': 'center', 'color': '#4CAF50'}),
-                html.Table([
-                    html.Thead(html.Tr([html.Th(col, style={'padding': '10px', 'border': '1px solid #ddd', 'backgroundColor': '#f2f2f2'}) for col in columns])),
-                    html.Tbody([
-                        html.Tr([
-                            html.Td(cell, style={'padding': '10px', 'border': '1px solid #ddd', 'textAlign': 'center', 'color': 'blue' if col == 'production_plan' else 'black'})
-                            for col, cell in zip(columns, row)
-                        ]) for row in data
-                    ])
-                ], style={'width': '100%', 'borderCollapse': 'collapse', 'margin': '20px auto'}),
+                dash_table.DataTable(
+                    columns=[{"name": c, "id": c} for c in columns],
+                    data=data_dicts,
+                    style_header={"fontSize": "18px", "textAlign": "center"},
+                    style_cell={"fontSize": "16px", "textAlign": "center"},
+                )
             ])
     finally:
         conn.close()
