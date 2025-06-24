@@ -390,7 +390,38 @@ def render_content(tab, n_clicks):
             cursor.execute("SELECT date, demand, production_plan, inventory FROM daily_data")
             data = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
+
+            # Fetch summary metrics
+            prod_summary = db_utils.get_production_summary()
+            demand_summary = db_utils.get_demand_summary()
+            inv_summary = db_utils.get_inventory_summary()
+
+            metrics = dbc.Row([
+                dbc.Col(
+                    dbc.Card([
+                        dbc.CardHeader("Total Production"),
+                        dbc.CardBody(html.Div(prod_summary.get("total_production", 0), className="metric-number"))
+                    ], body=True, className="text-center"),
+                    md=4
+                ),
+                dbc.Col(
+                    dbc.Card([
+                        dbc.CardHeader("Total Demand"),
+                        dbc.CardBody(html.Div(demand_summary.get("total_demand", 0), className="metric-number"))
+                    ], body=True, className="text-center"),
+                    md=4
+                ),
+                dbc.Col(
+                    dbc.Card([
+                        dbc.CardHeader("Total Inventory"),
+                        dbc.CardBody(html.Div(inv_summary.get("total_inventory", 0), className="metric-number"))
+                    ], body=True, className="text-center"),
+                    md=4
+                )
+            ], className="mb-4")
+
             return html.Div([
+                metrics,
                 html.H3('Daily Data', style={'textAlign': 'center', 'color': '#4CAF50'}),
                 html.Table([
                     html.Thead(html.Tr([html.Th(col, style={'padding': '10px', 'border': '1px solid #ddd', 'backgroundColor': '#f2f2f2'}) for col in columns])),
