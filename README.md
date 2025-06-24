@@ -19,10 +19,10 @@ This project implements a supply chain management system with AI-powered assista
 - `agents/` - Contains the AI agent definitions
   - `agentsscm.py` - Defines the supply chain management agents
 - `dashboard/` - Dashboard application
-  - [dashboard.py](cci:7://file:///c:/Users/Jorge/cascade%20projects/AICASE/dashboard/dashboard.py:0:0-0:0) - Main dashboard application
-- [data/](cci:1://file:///c:/Users/Jorge/cascade%20projects/AICASE/db_utils.py:19:0-48:20) - Database and data files
+  - `dashboard/dashboard.py` - Main dashboard application
+- `data/` - Database and data files
 - `chatbot.py` - Chat interface components and callbacks
-- [db_utils.py](cci:7://file:///c:/Users/Jorge/cascade%20projects/AICASE/db_utils.py:0:0-0:0) - Database utility functions
+- `db_utils.py` - Database utility functions
 
 
 ## Installation
@@ -36,8 +36,8 @@ This project implements a supply chain management system with AI-powered assista
 
 ## Usage
 
-1. Start the dashboard application:
-2. Access the dashboard in your web browser at [http://127.0.0.1](http://127.0.0.1):8050/
+1. Run `python dashboard/dashboard.py` to start the dashboard application.
+2. Access the dashboard in your web browser at [http://127.0.0.1:8050/](http://127.0.0.1:8050/)
 3. Use the chat interface to interact with the AI assistant
 
 ## AI Agents
