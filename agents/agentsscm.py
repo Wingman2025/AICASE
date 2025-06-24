@@ -136,6 +136,11 @@ def get_inventory_summary():
     return db_utils.get_inventory_summary()
 
 @function_tool
+def get_stockouts():
+    """Retrieve all rows with inventory at or below zero."""
+    return db_utils.get_stockouts()
+
+@function_tool
 def generate_future_data(start_date: str, days: int) -> Dict[str, Any]:
     """
     Generate random data for future dates and save to database.
@@ -179,13 +184,14 @@ production_planner = Agent(
       3. Providing summaries and insights about production patterns.
       4. Analyzing the relationship between demand and inventory.
       5. Updating production plan based on inventory levels.
-      6. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
-      7. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
-      8. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+      6. Retrieving all stockouts (days where inventory is zero or negative).
+      7. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
+      8. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
+      9. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
-    tools=[get_daily_data, update_production_plan, get_production_summary, get_inventory_summary]
+    tools=[get_daily_data, update_production_plan, get_production_summary, get_inventory_summary, get_stockouts]
 )
 
 demand_planner = Agent(

@@ -306,6 +306,21 @@ def get_inventory_summary():
     finally:
         conn.close()
 
+def get_stockouts() -> List[Dict[str, Any]]:
+    """Retrieve rows where inventory is zero or negative."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        query = (
+            "SELECT date, demand, production_plan, inventory FROM daily_data "
+            "WHERE inventory <= 0 ORDER BY date"
+        )
+        cursor.execute(query)
+        columns = [desc[0] for desc in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
 def generate_future_data(start_date: str, days: int) -> str:
     """
     Generate random data for future dates and save to database.
