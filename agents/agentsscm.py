@@ -169,7 +169,7 @@ def delete_all_data():
     return db_utils.delete_all_data()
 
 # Create specialist agents
-Production_planner_Assistant = Agent(
+production_planner = Agent(
     name="production_planner",
     instructions="""
     You are a production planning specialist for a supply chain management system.
@@ -188,7 +188,7 @@ Production_planner_Assistant = Agent(
     tools=[get_daily_data, update_production_plan, get_production_summary, get_inventory_summary]
 )
 
-Demand_planner_Assistant = Agent(
+demand_planner = Agent(
     name="demand_planner",
     instructions="""
     You are a demand planning specialist for a supply chain management system.
