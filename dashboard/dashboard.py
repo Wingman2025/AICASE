@@ -390,7 +390,10 @@ def render_content(tab, n_clicks):
         cursor = conn.cursor()
         if tab == 'tab-1':
             # Modified SQL query to specify column order including forecast
-            cursor.execute("SELECT date, demand, production_plan, forecast, inventory FROM daily_data")
+            cursor.execute(
+                "SELECT date, demand, production_plan, forecast, inventory "
+                "FROM daily_data ORDER BY date"
+            )
             data = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
 
@@ -444,8 +447,11 @@ def render_content(tab, n_clicks):
             demand_series = df['demand']
             forecast = forecast_utils.exponential_smoothing_forecast(periods=5)
 
-            last_date = pd.to_datetime(df['date'].iloc[-1], format='%Y-%m-%d' if db_utils.IS_RAILWAY else '%d-%m-%Y')
-            future_dates = [(last_date + pd.Timedelta(days=i)).strftime('%Y-%m-%d' if db_utils.IS_RAILWAY else '%d-%m-%Y') for i in range(1, len(forecast)+1)]
+            last_date = pd.to_datetime(df['date'].iloc[-1], format='%Y-%m-%d')
+            future_dates = [
+                (last_date + pd.Timedelta(days=i)).strftime('%Y-%m-%d')
+                for i in range(1, len(forecast) + 1)
+            ]
 
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=df['date'], y=demand_series, mode='lines+markers', name='Historical Demand'))
