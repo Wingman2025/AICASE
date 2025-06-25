@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
 import dateparser
+import re
 import numpy as np
 import psycopg2
 from dotenv import load_dotenv
@@ -56,13 +57,22 @@ def parse_date(date_str: str) -> str:
     Returns:
         Date string in the `YYYY-MM-DD` format for both PostgreSQL and SQLite.
     """
-    # Explicitly specify DD-MM-YYYY format as the preferred input format, but
-    # allow dateparser to handle natural language as well.
-    parsed = dateparser.parse(
-        date_str,
-        date_formats=["%d-%m-%Y", "%d/%m/%Y"],
-        settings={"PREFER_DAY_OF_MONTH": "first"},
-    )
+    # Explicitly specify DD-MM-YYYY format as the preferred input format,
+    # but allow dateparser to handle natural language as well. If the input
+    # is just a month name (optionally followed by a year), parse it
+    # separately so the day defaults to the first of that month.
+    month_only = re.fullmatch(r"[A-Za-z]+(?:\s+\d{4})?", date_str.strip())
+    if month_only:
+        parsed = dateparser.parse(
+            date_str,
+            settings={"PREFER_DAY_OF_MONTH": "first"},
+        )
+    else:
+        parsed = dateparser.parse(
+            date_str,
+            date_formats=["%d-%m-%Y", "%d/%m/%Y"],
+            settings={"PREFER_DAY_OF_MONTH": "first"},
+        )
     if not parsed:
         raise ValueError(f"No se pudo interpretar la fecha: {date_str}")
 
