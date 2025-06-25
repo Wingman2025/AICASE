@@ -85,15 +85,15 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
                 print(f"Buscando datos para la fecha: {formatted_date}")
                 
                 if IS_RAILWAY:
-                    query = "SELECT date, demand, inventory, production_plan FROM daily_data WHERE date = %s"
+                    query = "SELECT date, demand, production_plan, forecast, inventory FROM daily_data WHERE date = %s"
                 else:
-                    query = "SELECT date, demand, inventory, production_plan FROM daily_data WHERE date = ?"
+                    query = "SELECT date, demand, production_plan, forecast, inventory FROM daily_data WHERE date = ?"
                 cursor.execute(query, (formatted_date,))
             except ValueError as e:
                 print(f"Error al procesar la fecha: {e}")
                 return []
         else:
-            query = "SELECT date, demand, inventory, production_plan FROM daily_data ORDER BY date"
+            query = "SELECT date, demand, production_plan, forecast, inventory FROM daily_data ORDER BY date"
             cursor.execute(query)
             
         columns = [column[0] for column in cursor.description]
@@ -217,6 +217,33 @@ def update_demand(date: str, demand: int) -> str:
         if cursor.rowcount == 0:
             return f"No record found for date {date}."
         return f"Demand for {date} updated successfully to {demand}. Inventory recalculated to {new_inventory}."
+    except Exception as e:
+        return f"Error updating record: {str(e)}"
+    finally:
+        conn.close()
+
+def update_forecast(date: str, forecast_value: int) -> str:
+    """Update the forecast value for a specific date."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+
+        if IS_RAILWAY:
+            cursor.execute(
+                "UPDATE daily_data SET forecast = %s WHERE date = %s",
+                (int(forecast_value), date),
+            )
+        else:
+            cursor.execute(
+                "UPDATE daily_data SET forecast = ? WHERE date = ?",
+                (int(forecast_value), date),
+            )
+
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            return f"No record found for date {date}."
+        return f"Forecast for {date} updated successfully to {forecast_value}."
     except Exception as e:
         return f"Error updating record: {str(e)}"
     finally:
@@ -371,6 +398,7 @@ def generate_future_data(start_date: str, days: int) -> str:
             dates = [start_date_obj + timedelta(days=i) for i in range(days)]
             demand = np.random.randint(50, 150, size=days)
             production_plan = np.random.randint(50, 150, size=days)
+            forecast = np.random.randint(50, 150, size=days)
             
             # Calculate inventory as production_plan - demand
             inventory = [int(production_plan[i]) - int(demand[i]) for i in range(days)]
@@ -402,25 +430,25 @@ def generate_future_data(start_date: str, days: int) -> str:
                     # Update existing record
                     if IS_RAILWAY:
                         cursor.execute(
-                            "UPDATE daily_data SET demand = %s, production_plan = %s, inventory = %s WHERE date = %s",
-                            (int(demand[i]), int(production_plan[i]), int(inventory[i]), formatted_dates[i])
+                            "UPDATE daily_data SET demand = %s, production_plan = %s, forecast = %s, inventory = %s WHERE date = %s",
+                            (int(demand[i]), int(production_plan[i]), int(forecast[i]), int(inventory[i]), formatted_dates[i])
                         )
                     else:
                         cursor.execute(
-                            "UPDATE daily_data SET demand = ?, production_plan = ?, inventory = ? WHERE date = ?",
-                            (int(demand[i]), int(production_plan[i]), int(inventory[i]), formatted_dates[i])
+                            "UPDATE daily_data SET demand = ?, production_plan = ?, forecast = ?, inventory = ? WHERE date = ?",
+                            (int(demand[i]), int(production_plan[i]), int(forecast[i]), int(inventory[i]), formatted_dates[i])
                         )
                 else:
                     # Insert new record
                     if IS_RAILWAY:
                         cursor.execute(
-                            "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (%s, %s, %s, %s)",
-                            (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
+                            "INSERT INTO daily_data (date, demand, production_plan, forecast, inventory) VALUES (%s, %s, %s, %s, %s)",
+                            (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(forecast[i]), int(inventory[i]))
                         )
                     else:
                         cursor.execute(
-                            "INSERT INTO daily_data (date, demand, production_plan, inventory) VALUES (?, ?, ?, ?)",
-                            (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(inventory[i]))
+                            "INSERT INTO daily_data (date, demand, production_plan, forecast, inventory) VALUES (?, ?, ?, ?, ?)",
+                            (formatted_dates[i], int(demand[i]), int(production_plan[i]), int(forecast[i]), int(inventory[i]))
                         )
             
             conn.commit()
@@ -878,5 +906,36 @@ def migrate_conversation_history_table():
             
     except Exception as e:
         print(f"Error al verificar/añadir la columna user_id: {str(e)}")
+    finally:
+        conn.close()
+
+def ensure_forecast_column():
+    """Ensure the daily_data table has a forecast column."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        if IS_RAILWAY:
+            cursor.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'daily_data' AND column_name = 'forecast'
+                """
+            )
+            exists = cursor.fetchone()
+            if not exists:
+                print("Añadiendo columna forecast a la tabla daily_data en PostgreSQL...")
+                cursor.execute("ALTER TABLE daily_data ADD COLUMN forecast INTEGER DEFAULT 0")
+                conn.commit()
+        else:
+            cursor.execute("PRAGMA table_info(daily_data)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'forecast' not in columns:
+                print("Añadiendo columna forecast a la tabla daily_data en SQLite...")
+                cursor.execute("ALTER TABLE daily_data ADD COLUMN forecast INTEGER DEFAULT 0")
+                conn.commit()
+    except Exception as e:
+        print(f"Error al verificar/añadir la columna forecast: {str(e)}")
     finally:
         conn.close()

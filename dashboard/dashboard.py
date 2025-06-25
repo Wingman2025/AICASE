@@ -389,8 +389,8 @@ def render_content(tab, n_clicks):
     try:
         cursor = conn.cursor()
         if tab == 'tab-1':
-            # Modified SQL query to specify column order with inventory at the end
-            cursor.execute("SELECT date, demand, production_plan, inventory FROM daily_data")
+            # Modified SQL query to specify column order including forecast
+            cursor.execute("SELECT date, demand, production_plan, forecast, inventory FROM daily_data")
             data = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
 
@@ -559,6 +559,7 @@ chatbot.register_callbacks(app)
 migrate_users_table_if_needed()
 # Ejecutar la migración de la tabla conversation_history para añadir la columna user_id si no existe
 db_utils.migrate_conversation_history_table()
+db_utils.ensure_forecast_column()
 
 if __name__ == '__main__':
     # Use standard configuration for local development
