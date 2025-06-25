@@ -53,7 +53,9 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
     return result
 
 @function_tool
-def update_production_plan(date: str, production_plan: int) -> Dict[str, Any]:
+def update_production_plan(
+    date: str, production_plan: int, persist: bool = False
+) -> Dict[str, Any]:
     """
     Update the production plan for a specific date.
 
@@ -79,8 +81,15 @@ def update_production_plan(date: str, production_plan: int) -> Dict[str, Any]:
             "message": "Verifica que la fecha exista en la base de datos."
         }
 
+    if not persist:
+        return {
+            "message": f"Would update production plan for {formatted_date} to {production_plan}."
+        }
+
     # Llamar a la función de actualización en db_utils
-    result_message = db_utils.update_production_plan(formatted_date, production_plan)
+    result_message = db_utils.update_production_plan(
+        formatted_date, production_plan
+    )
     return {"message": result_message}
 
 
@@ -99,8 +108,10 @@ def get_demand_summary():
     return db_utils.get_demand_summary()
 
 @function_tool
-def calculate_demand_forecast(method: str = "exponential_smoothing", periods: int = 7) -> Dict[str, Any]:
-    """Calculate demand forecast using historical data and persist to the database."""
+def calculate_demand_forecast(
+    method: str = "exponential_smoothing", periods: int = 7, persist: bool = False
+) -> Dict[str, Any]:
+    """Calculate demand forecast using historical data."""
     if method == "moving_average":
         forecast = forecast_utils.moving_average_forecast(periods=periods)
     else:
@@ -109,21 +120,53 @@ def calculate_demand_forecast(method: str = "exponential_smoothing", periods: in
     if not forecast:
         return {"error": "No demand data available for forecasting"}
 
-    # Determine the start date based on the latest existing record
-    data = db_utils.get_daily_data()
-    if data:
-        last_date_str = max(row["date"] for row in data)
-        last_date = datetime.strptime(last_date_str, "%Y-%m-%d")
-        next_date = last_date + timedelta(days=1)
+    if persist:
+        # Determine the start date based on the latest existing record
+        data = db_utils.get_daily_data()
+        if data:
+            last_date_str = max(row["date"] for row in data)
+            last_date = datetime.strptime(last_date_str, "%Y-%m-%d")
+            next_date = last_date + timedelta(days=1)
 
-        for value in forecast:
-            db_utils.update_forecast(next_date.strftime("%Y-%m-%d"), int(value))
-            next_date += timedelta(days=1)
+            for value in forecast:
+                result_msg = db_utils.update_forecast(
+                    next_date.strftime("%Y-%m-%d"), int(value)
+                )
+                if "No record found" in result_msg:
+                    conn = db_utils.get_connection()
+                    cur = conn.cursor()
+                    if db_utils.IS_RAILWAY:
+                        cur.execute(
+                            "INSERT INTO daily_data (date, demand, production_plan, forecast, inventory) VALUES (%s, %s, %s, %s, %s)",
+                            (
+                                next_date.strftime("%Y-%m-%d"),
+                                0,
+                                0,
+                                int(value),
+                                0,
+                            ),
+                        )
+                    else:
+                        cur.execute(
+                            "INSERT INTO daily_data (date, demand, production_plan, forecast, inventory) VALUES (?, ?, ?, ?, ?)",
+                            (
+                                next_date.strftime("%Y-%m-%d"),
+                                0,
+                                0,
+                                int(value),
+                                0,
+                            ),
+                        )
+                    conn.commit()
+                    conn.close()
+                next_date += timedelta(days=1)
 
     return {"forecast": forecast}
 
 @function_tool
-def update_demand(date: str, demand: int) -> Dict[str, Any]:
+def update_demand(
+    date: str, demand: int, persist: bool = False
+) -> Dict[str, Any]:
     """
     Update the demand for a specific date.
 
@@ -149,6 +192,11 @@ def update_demand(date: str, demand: int) -> Dict[str, Any]:
             "message": "Verifica que la fecha exista en la base de datos."
         }
 
+    if not persist:
+        return {
+            "message": f"Would update demand for {formatted_date} to {demand}."
+        }
+
     # Llamar a la función de actualización en db_utils
     result_message = db_utils.update_demand(formatted_date, demand)
     return {"message": result_message}
@@ -171,7 +219,9 @@ def propose_production_plan_for_stockouts():
     return db_utils.propose_production_plan_for_stockouts()
 
 @function_tool
-def generate_future_data(start_date: str, days: int) -> Dict[str, Any]:
+def generate_future_data(
+    start_date: str, days: int, persist: bool = False
+) -> Dict[str, Any]:
     """
     Generate random data for future dates and save to database.
     
@@ -189,6 +239,11 @@ def generate_future_data(start_date: str, days: int) -> Dict[str, Any]:
     except ValueError as e:
         return {"error": str(e)}
         
+    if not persist:
+        return {
+            "message": f"Would generate random data from {formatted_start_date} for {days} days."
+        }
+
     # Llamar a la función de generación en db_utils
     result_message = db_utils.generate_future_data(formatted_start_date, days)
     return {"message": result_message}
@@ -216,7 +271,7 @@ production_planner = Agent(
       5. Updating production plan based on inventory levels.
       6. Retrieving all stockouts (days where inventory is zero or negative).
       7. Proposing a new production plan for those stockouts by matching the day's demand.
-      8. **Before running any calculation or updating the database, summarise the intended method (e.g., forecasting technique and number of periods) and ask the user to confirm.**
+      8. **Before running any calculation or updating the database, summarise the intended method (e.g., forecasting technique and number of periods) and ask the user to confirm. Only call `update_production_plan` after the user explicitly agrees.**
       9. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
      10. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
      11. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
@@ -234,9 +289,11 @@ demand_planner = Agent(
       1. Getting daily data to understand current demand.
       2. Providing summaries and insights about demand patterns.
       3. **Before running any forecast or modifying demand values, summarise the calculation method and number of periods, then request user confirmation before executing.**
-      4. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
-      5. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
-      6. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+      4. When forecasting demand, first call `calculate_demand_forecast` with `persist=False` and show the results. Explicitly ask the user if they want to save the forecast; only if they agree call the tool again with `persist=True`.
+      5. Only call `update_demand` after the user confirms the change.
+      6. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
+      7. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
+      8. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
@@ -251,12 +308,12 @@ data_generator = Agent(
       1. Generating random but realistic data for future dates.
       2. Ensuring data consistency and integrity.
       3. Eliminating all data when the user wants to start from scratch.
-    
+
     When asked to generate data:
-      - Confirm the start date and number of days.
+      - Confirm the start date and number of days and ask the user if they want to proceed.
       - Use the YYYY-MM-DD format for dates (e.g., "2025-04-18").
       - Explain what data was generated and how it can be used.
-    
+
     When asked to delete all data:
       - Confirm with the user that they really want to delete all data.
       - Warn them that this action cannot be undone.
