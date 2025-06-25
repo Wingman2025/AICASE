@@ -172,6 +172,8 @@ def create_chat_components():
                 "zIndex": "1001",
                 "boxShadow": "0 4px 20px rgba(0,0,0,0.15)",
                 "borderRadius": "15px",
+                "backgroundColor": "rgba(255, 255, 255, 0.85)",
+                "backdropFilter": "blur(4px)",
                 "display": "none",  # Initially hidden
                 "transition": "all 0.3s ease"
             },
