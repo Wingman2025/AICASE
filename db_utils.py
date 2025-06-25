@@ -163,6 +163,46 @@ def update_demand(date: str, demand: int) -> str:
     finally:
         conn.close()
 
+def increase_all_demand(offset: int) -> str:
+    """Increase demand for every existing record by a constant offset and recalculate inventory cumulatively.
+
+    Args:
+        offset: Integer to add to each demand value (can be negative).
+
+    Returns:
+        Success or error message.
+    """
+    if offset == 0:
+        return "Offset is zero; no changes made."
+
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT date, demand FROM daily_data ORDER BY date")
+        rows = cursor.fetchall()
+        if not rows:
+            return "No data available to update."
+
+        for date_val, demand in rows:
+            new_demand = int(demand) + int(offset)
+            if IS_RAILWAY:
+                cursor.execute("UPDATE daily_data SET demand = %s WHERE date = %s", (new_demand, date_val))
+            else:
+                cursor.execute("UPDATE daily_data SET demand = ? WHERE date = ?", (new_demand, date_val))
+
+        conn.commit()
+
+        # Recalculate inventory once starting from first date
+        first_date = rows[0][0]
+        recalculate_inventory_from(first_date)
+        return f"Demand increased by {offset} units for {len(rows)} days. Inventory recalculated cumulatively."
+    except Exception as e:
+        conn.rollback()
+        return f"Error increasing demand: {str(e)}"
+    finally:
+        conn.close()
+
+
 def update_forecast(date: str, forecast_value: int) -> str:
     """Update the forecast value for a specific date."""
     conn = get_connection()

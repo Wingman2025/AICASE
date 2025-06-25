@@ -154,6 +154,12 @@ def update_demand(date: str, demand: int) -> Dict[str, Any]:
     return {"message": result_message}
 
 @function_tool
+def increase_all_demand(offset: int) -> Dict[str, Any]:
+    """Increase demand for every existing record by a constant offset (e.g., +50)."""
+    result_message = db_utils.increase_all_demand(offset)
+    return {"message": result_message}
+
+@function_tool
 def get_inventory_summary():
     """
     Get a summary of inventory data.
@@ -216,7 +222,7 @@ production_planner = Agent(
       5. Updating production plan based on inventory levels.
       6. Retrieving all stockouts (days where inventory is zero or negative).
       7. Proposing a new production plan for those stockouts by matching the day's demand.
-      8. **Before running any calculation or updating the database, summarise the intended method (e.g., forecasting technique and number of periods) and ask the user to confirm.**
+      8. **Before running any calculation or updating the database, draft a concise plan that lists _each_ date that will be modified and the exact new value to be written (e.g., `current + 50`). Present this plan to the user and request an explicit yes/no confirmation before executing.**
       9. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
      10. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
      11. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
@@ -233,14 +239,14 @@ demand_planner = Agent(
     Your responsibilities include:
       1. Getting daily data to understand current demand.
       2. Providing summaries and insights about demand patterns.
-      3. **Before running any forecast or modifying demand values, summarise the calculation method and number of periods, then request user confirmation before executing.**
+      3. **Before running any forecast or modifying demand values, create a clear plan showing every date to be affected and the resulting demand value (e.g., `existing + 50`). Present the plan to the user and wait for an explicit yes/no confirmation before executing.**
       4. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
       5. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
       6. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
-    tools=[get_daily_data, update_demand, get_demand_summary, calculate_demand_forecast]
+    tools=[get_daily_data, update_demand, increase_all_demand, get_demand_summary, calculate_demand_forecast]
 )
 
 data_generator = Agent(
