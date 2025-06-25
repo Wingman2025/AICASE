@@ -264,13 +264,24 @@ def get_inventory_summary():
             cursor.execute("SELECT SUM(inventory), AVG(inventory), MIN(inventory), MAX(inventory) FROM daily_data")
         
         total, avg, min_val, max_val = cursor.fetchone()
-        
+
         return {
             "total_inventory": int(total) if total is not None else 0,
             "average_inventory": round(float(avg), 2) if avg is not None else 0,
             "min_inventory": int(min_val) if min_val is not None else 0,
             "max_inventory": int(max_val) if max_val is not None else 0
         }
+    finally:
+        conn.close()
+
+def get_latest_inventory() -> int:
+    """Return the inventory value for the most recent date."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT inventory FROM daily_data ORDER BY date DESC LIMIT 1")
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
     finally:
         conn.close()
 
