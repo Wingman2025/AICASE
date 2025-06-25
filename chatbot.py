@@ -80,10 +80,10 @@ def create_chat_components():
             className="rounded-circle p-3",
             style={
                 "position": "fixed",
-                "bottom": "30px",
-                "right": "30px",
-                "width": "60px",
-                "height": "60px",
+                "bottom": "20px",
+                "right": "20px",
+                "width": "50px",
+                "height": "50px",
                 "zIndex": "1000",
                 "boxShadow": "0 4px 8px rgba(0,0,0,0.2)",
                 "display": "flex",
@@ -130,7 +130,7 @@ def create_chat_components():
                         html.Div(
                             id="chat-history",
                             style={
-                                "height": "300px",
+                "height": "250px",
                                 "overflowY": "auto",
                                 "display": "flex",
                                 "flexDirection": "column",
@@ -165,14 +165,14 @@ def create_chat_components():
             ],
             style={
                 "position": "fixed",
-                "bottom": "100px",
+                "bottom": "80px",
                 "right": "30px",
-                "width": "400px",
+                "width": "350px",
                 "maxWidth": "90vw",
                 "zIndex": "1001",
                 "boxShadow": "0 4px 20px rgba(0,0,0,0.15)",
                 "borderRadius": "15px",
-                "backgroundColor": "rgba(255, 255, 255, 0.85)",
+                "backgroundColor": "rgba(255, 255, 255, 0.75)",
                 "backdropFilter": "blur(4px)",
                 "display": "none",  # Initially hidden
                 "transition": "all 0.3s ease"
