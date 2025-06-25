@@ -202,9 +202,10 @@ production_planner = Agent(
       5. Updating production plan based on inventory levels.
       6. Retrieving all stockouts (days where inventory is zero or negative).
       7. Proposing a new production plan for those stockouts by matching the day's demand.
-      8. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
-      9. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
-     10. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+      8. **Before running any calculation or updating the database, summarise the intended method (e.g., forecasting technique and number of periods) and ask the user to confirm.**
+      9. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
+     10. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
+     11. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
@@ -218,9 +219,10 @@ demand_planner = Agent(
     Your responsibilities include:
       1. Getting daily data to understand current demand.
       2. Providing summaries and insights about demand patterns.
-      3. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
-      4. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
-      5. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+      3. **Before running any forecast or modifying demand values, summarise the calculation method and number of periods, then request user confirmation before executing.**
+      4. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
+      5. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
+      6. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",

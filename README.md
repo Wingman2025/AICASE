@@ -39,6 +39,7 @@ This project implements a supply chain management system with AI-powered assista
 1. Run `python dashboard/dashboard.py` to start the dashboard application.
 2. Access the dashboard in your web browser at [http://127.0.0.1:8050/](http://127.0.0.1:8050/)
 3. Use the chat interface to interact with the AI assistant
+4. When requesting forecasts or data updates, the agent will summarise the chosen calculation method and parameters, then ask for your confirmation before executing.
 
 ## AI Agents
 
@@ -69,14 +70,14 @@ The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io
       – `get_inventory_summary`
       – `get_stockouts`
       – `propose_production_plan_for_stockouts`
-   • Responsibilities: analyse production vs demand, adjust production plans, propose fixes for stockouts, and report inventory impact.
+  • Responsibilities: analyse production vs demand, adjust production plans, propose fixes for stockouts, and report inventory impact. Before running calculations or modifying the database, this agent summarises the intended method (such as forecasting approach and periods) and requests confirmation from the user.
 
 3. **Demand Planner (`demand_planner`)**
    • Tools:  
      – `get_daily_data`  
      – `update_demand`  
      – `get_demand_summary`  
-   • Responsibilities: monitor and update demand values, forecast demand trends.
+  • Responsibilities: monitor and update demand values and forecast demand trends. Prior to any forecast or data update, the agent explains the calculation method and parameters and asks you to confirm before proceeding.
 
 4. **Data Generator (`data_generator`)**
    • Tools:  
