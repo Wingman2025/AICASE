@@ -25,6 +25,18 @@ This project implements a supply chain management system with AI-powered assista
 - `db_utils.py` - Database utility functions
 
 
+## Tech Stack
+
+The application relies on the following core technologies:
+
+- **Python 3.11** – primary language
+- **OpenAI Agents SDK 0.0.8** – multi-agent LLM framework
+- **Dash 2.x** & **Dash Bootstrap Components** – interactive dashboard UI
+- **Pandas** – data wrangling and analysis
+- **dateparser** – natural-language date parsing (European preference)
+- **SQLite** (dev) & **PostgreSQL** (Railway) – relational storage with automatic driver switching
+- **Asyncio** – async operations inside agents & web app
+
 ## Installation
 
 1. Clone this repository
@@ -99,6 +111,8 @@ The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io
 | `get_stockouts()` | Retrieve all rows where inventory is zero or negative. |
 | `propose_production_plan_for_stockouts()` | Suggest production plans equal to demand on stockout days. |
 | `generate_future_data(start_date, days)` | Populates future records with random realistic values. |
+| `increase_all_demand(offset)` | Adds an offset to demand across all dates and recalculates inventory. |
+| `clear_all_forecast()` | Sets all forecast values to NULL without deleting any rows. |
 | `delete_all_data()` | Hard reset of the database. |
 
 #### Conversation & Memory
@@ -122,6 +136,15 @@ The application uses SQLite to store supply chain data. The database includes:
 - Daily demand data
 - Production plans
 - Inventory levels
+
+## Recent Updates
+
+- Agents now draft a detailed plan and request explicit confirmation before any DB write.
+- Added `increase_all_demand(offset)` tool for uniform bulk demand shifts (+/-) with automatic inventory recalculation.
+- Added `clear_all_forecast()` tool to purge forecast values without touching other data.
+- Triage routing extended so forecast-clearing requests reach the Demand Planner.
+- Unified date handling: all functions produce `YYYY-MM-DD` regardless of backend.
+- Inventory recalculates cumulatively whenever production or demand is changed.
 
 ## License
 
