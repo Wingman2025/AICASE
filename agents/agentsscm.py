@@ -9,6 +9,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 import db_utils
+import forecast_utils
 from agents import Agent, Runner, function_tool
 from typing import Optional, List, Dict, Any
 
@@ -96,6 +97,17 @@ def get_demand_summary():
     Get a summary of demand data.
     """
     return db_utils.get_demand_summary()
+
+@function_tool
+def calculate_demand_forecast(method: str = "exponential_smoothing", periods: int = 7) -> Dict[str, Any]:
+    """Calculate demand forecast using historical data."""
+    if method == "moving_average":
+        forecast = forecast_utils.moving_average_forecast(periods=periods)
+    else:
+        forecast = forecast_utils.exponential_smoothing_forecast(periods=periods)
+    if not forecast:
+        return {"error": "No demand data available for forecasting"}
+    return {"forecast": forecast}
 
 @function_tool
 def update_demand(date: str, demand: int) -> Dict[str, Any]:
@@ -213,7 +225,7 @@ demand_planner = Agent(
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
-    tools=[get_daily_data, update_demand, get_demand_summary]
+    tools=[get_daily_data, update_demand, get_demand_summary, calculate_demand_forecast]
 )
 
 data_generator = Agent(

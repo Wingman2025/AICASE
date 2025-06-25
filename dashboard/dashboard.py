@@ -8,6 +8,9 @@ import dash_bootstrap_components as dbc
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
 from flask_login import UserMixin, login_user, current_user, LoginManager, logout_user
+import pandas as pd
+import plotly.graph_objects as go
+import forecast_utils
 
 # Try to import Railway-specific packages, but continue if not available
 try:
@@ -433,6 +436,27 @@ def render_content(tab, n_clicks):
                     ])
                 ], style={'width': '100%', 'borderCollapse': 'collapse', 'margin': '20px auto'}),
             ])
+        elif tab == 'tab-3':
+            df = pd.DataFrame(db_utils.get_daily_data())
+            if df.empty:
+                return html.Div("No data available")
+            demand_series = df['demand']
+            forecast = forecast_utils.exponential_smoothing_forecast(periods=5)
+
+            last_date = pd.to_datetime(df['date'].iloc[-1], format='%Y-%m-%d' if db_utils.IS_RAILWAY else '%d-%m-%Y')
+            future_dates = [(last_date + pd.Timedelta(days=i)).strftime('%Y-%m-%d' if db_utils.IS_RAILWAY else '%d-%m-%Y') for i in range(1, len(forecast)+1)]
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=df['date'], y=demand_series, mode='lines+markers', name='Historical Demand'))
+            fig.add_trace(go.Scatter(x=future_dates, y=forecast, mode='lines+markers', name='Forecast'))
+
+            return html.Div([
+                dcc.Graph(figure=fig),
+                html.H5('Forecast Values'),
+                html.Ul([html.Li(f"{d}: {v}") for d, v in zip(future_dates, forecast)])
+            ])
+        else:
+            return html.Div("Tab not implemented")
     finally:
         conn.close()
 
