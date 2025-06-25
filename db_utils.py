@@ -122,106 +122,42 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
         conn.close()
 
 def update_production_plan(date: str, production_plan: int) -> str:
-    """
-    Update the production plan for a specific date and recalculate inventory.
-    
-    Args:
-        date: Date string in `YYYY-MM-DD` format.
-        production_plan: New production plan value.
-        
-    Returns:
-        Success or error message.
-    """
+    """Update the production plan for a specific date and recalculate cumulative inventory."""
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        
-        # First, get the current demand for this date
+
         if IS_RAILWAY:
-            cursor.execute("SELECT demand FROM daily_data WHERE date = %s", (date,))
+            cursor.execute("UPDATE daily_data SET production_plan = %s WHERE date = %s", (int(production_plan), date))
         else:
-            cursor.execute("SELECT demand FROM daily_data WHERE date = ?", (date,))
-        
-        result = cursor.fetchone()
-        
-        if result is None:
-            return f"No record found for date {date}."
-            
-        demand = result[0]
-        
-        # Calculate new inventory value
-        new_inventory = int(production_plan) - int(demand)
-        
-        # Update both production_plan and inventory
-        if IS_RAILWAY:
-            cursor.execute(
-                "UPDATE daily_data SET production_plan = %s, inventory = %s WHERE date = %s", 
-                (int(production_plan), int(new_inventory), date)
-            )
-        else:
-            cursor.execute(
-                "UPDATE daily_data SET production_plan = ?, inventory = ? WHERE date = ?", 
-                (int(production_plan), int(new_inventory), date)
-            )
-        
+            cursor.execute("UPDATE daily_data SET production_plan = ? WHERE date = ?", (int(production_plan), date))
+
         conn.commit()
-        
+
         if cursor.rowcount == 0:
             return f"No record found for date {date}."
-        return f"Production plan for {date} updated successfully to {production_plan}. Inventory recalculated to {new_inventory}."
+
+        recalculate_inventory_from(date)
+        return f"Production plan for {date} updated successfully to {production_plan}. Inventory recalculated cumulatively."
     except Exception as e:
         return f"Error updating record: {str(e)}"
     finally:
         conn.close()
 
 def update_demand(date: str, demand: int) -> str:
-    """
-    Update the demand for a specific date and recalculate inventory.
-    
-    Args:
-        date: Date string in `YYYY-MM-DD` format.
-        demand: New demand value.
-        
-    Returns:
-        Success or error message.
-    """
+    """Update the demand for a specific date and recalculate cumulative inventory."""
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        
-        # First, get the current production_plan for this date
         if IS_RAILWAY:
-            cursor.execute("SELECT production_plan FROM daily_data WHERE date = %s", (date,))
+            cursor.execute("UPDATE daily_data SET demand = %s WHERE date = %s", (int(demand), date))
         else:
-            cursor.execute("SELECT production_plan FROM daily_data WHERE date = ?", (date,))
-        
-        result = cursor.fetchone()
-        
-        if result is None:
-            return f"No record found for date {date}."
-            
-        production_plan = result[0]
-        
-        # Calculate new inventory value
-        new_inventory = int(production_plan) - int(demand)
-        
-        # Update both demand and inventory
-        if IS_RAILWAY:
-            cursor.execute(
-                "UPDATE daily_data SET demand = %s, inventory = %s WHERE date = %s", 
-                (int(demand), int(new_inventory), date)
-            )
-        else:
-            cursor.execute(
-                "UPDATE daily_data SET demand = ?, inventory = ? WHERE date = ?", 
-                (int(demand), int(new_inventory), date)
-            )
-        
+            cursor.execute("UPDATE daily_data SET demand = ? WHERE date = ?", (int(demand), date))
         conn.commit()
-        
         if cursor.rowcount == 0:
             return f"No record found for date {date}."
-        return f"Demand for {date} updated successfully to {demand}. Inventory recalculated to {new_inventory}."
+        recalculate_inventory_from(date)
+        return f"Demand for {date} updated successfully to {demand}. Inventory recalculated cumulatively."
     except Exception as e:
         return f"Error updating record: {str(e)}"
     finally:
@@ -374,8 +310,35 @@ def propose_production_plan_for_stockouts() -> List[Dict[str, Any]]:
         )
     return proposals
 
+def recalculate_inventory_from(start_date: str) -> None:
+    """Recompute cumulative inventory from a given date onward."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        if IS_RAILWAY:
+            cursor.execute("SELECT inventory FROM daily_data WHERE date < %s ORDER BY date DESC LIMIT 1", (start_date,))
+        else:
+            cursor.execute("SELECT inventory FROM daily_data WHERE date < ? ORDER BY date DESC LIMIT 1", (start_date,))
+        prev = cursor.fetchone()
+        running_inventory = int(prev[0]) if prev else 0
+        if IS_RAILWAY:
+            cursor.execute("SELECT date, production_plan, demand FROM daily_data WHERE date >= %s ORDER BY date", (start_date,))
+        else:
+            cursor.execute("SELECT date, production_plan, demand FROM daily_data WHERE date >= ? ORDER BY date", (start_date,))
+        rows = cursor.fetchall()
+        for date_val, plan, demand in rows:
+            running_inventory += int(plan) - int(demand)
+            if IS_RAILWAY:
+                cursor.execute("UPDATE daily_data SET inventory = %s WHERE date = %s", (running_inventory, date_val))
+            else:
+                cursor.execute("UPDATE daily_data SET inventory = ? WHERE date = ?", (running_inventory, date_val))
+        conn.commit()
+    finally:
+        conn.close()
+
 def generate_future_data(start_date: str, days: int) -> str:
     """
+
     Generate random data for future dates and save to database.
     
     Args:
@@ -400,9 +363,21 @@ def generate_future_data(start_date: str, days: int) -> str:
             demand = np.random.randint(50, 150, size=days)
             production_plan = np.random.randint(50, 150, size=days)
             forecast = np.random.randint(50, 150, size=days)
-            
-            # Calculate inventory as production_plan - demand
-            inventory = [int(production_plan[i]) - int(demand[i]) for i in range(days)]
+
+            # Calculate cumulative inventory
+            conn = get_connection()
+            cursor = conn.cursor()
+            if IS_RAILWAY:
+                cursor.execute("SELECT inventory FROM daily_data WHERE date < %s ORDER BY date DESC LIMIT 1", (formatted_start_date,))
+            else:
+                cursor.execute("SELECT inventory FROM daily_data WHERE date < ? ORDER BY date DESC LIMIT 1", (formatted_start_date,))
+            row = cursor.fetchone()
+            running_inventory = int(row[0]) if row else 0
+            inventory = []
+            for i in range(days):
+                running_inventory += int(production_plan[i]) - int(demand[i])
+                inventory.append(running_inventory)
+            conn.close()
             
             # Format dates for database (always YYYY-MM-DD)
             formatted_dates = [date.strftime("%Y-%m-%d") for date in dates]
