@@ -402,6 +402,7 @@ def render_content(tab, n_clicks):
             prod_summary = db_utils.get_production_summary()
             demand_summary = db_utils.get_demand_summary()
             inv_summary = db_utils.get_inventory_summary()
+            projected_inventory = db_utils.get_latest_inventory()
 
             metrics = dbc.Row([
                 dbc.Col(
@@ -420,8 +421,8 @@ def render_content(tab, n_clicks):
                 ),
                 dbc.Col(
                     dbc.Card([
-                        dbc.CardHeader("Total Inventory"),
-                        dbc.CardBody(html.Div(inv_summary.get("total_inventory", 0), className="metric-number"))
+                        dbc.CardHeader("Projected Inventory"),
+                        dbc.CardBody(html.Div(projected_inventory, className="metric-number"))
                     ], body=True, className="text-center"),
                     md=4
                 )
