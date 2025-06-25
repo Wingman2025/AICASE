@@ -177,6 +177,12 @@ def propose_production_plan_for_stockouts():
     return db_utils.propose_production_plan_for_stockouts()
 
 @function_tool
+def clear_all_forecast() -> Dict[str, Any]:
+    """Clear the forecast column for every row without deleting any data."""
+    msg = db_utils.clear_all_forecast()
+    return {"message": msg}
+
+@function_tool
 def generate_future_data(start_date: str, days: int) -> Dict[str, Any]:
     """
     Generate random data for future dates and save to database.
@@ -239,14 +245,14 @@ demand_planner = Agent(
     Your responsibilities include:
       1. Getting daily data to understand current demand.
       2. Providing summaries and insights about demand patterns.
-      3. **Before running any forecast or modifying demand values, create a clear plan showing every date to be affected and the resulting demand value (e.g., `existing + 50`). Present the plan to the user and wait for an explicit yes/no confirmation before executing.**
+      3. **Before running any forecast, modifying demand values, or clearing forecast data, create a clear plan (e.g., list of dates that will become `NULL` for forecast) and ask the user to confirm before executing.**
       4. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
       5. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
       6. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
-    tools=[get_daily_data, update_demand, increase_all_demand, get_demand_summary, calculate_demand_forecast]
+    tools=[get_daily_data, update_demand, increase_all_demand, clear_all_forecast, get_demand_summary, calculate_demand_forecast]
 )
 
 data_generator = Agent(
@@ -282,7 +288,7 @@ triage_agent = Agent(
     instructions="""
     You determine which specialist agent to use based on the user's question:
     - Route to production_planner for questions about production plans, updating production plan, inventory levels.
-    - Route to demand_planner for questions about demand data, demand generation and demand analysis.
+    - Route to demand_planner for questions about demand data, demand generation, demand analysis, or clearing forecast values.
     - Route to data_generator for:
       * Requests to generate new data.
       * Requests to delete all data and start from scratch.

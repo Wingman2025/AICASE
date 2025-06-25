@@ -230,6 +230,22 @@ def update_forecast(date: str, forecast_value: int) -> str:
     finally:
         conn.close()
 
+def clear_all_forecast() -> str:
+    """Clear the forecast column for every row without deleting data."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        # Set forecast to NULL (works both PostgreSQL and SQLite)
+        cursor.execute("UPDATE daily_data SET forecast = NULL")
+        conn.commit()
+        return "All forecast values cleared."
+    except Exception as e:
+        conn.rollback()
+        return f"Error clearing forecast values: {str(e)}"
+    finally:
+        conn.close()
+
+
 def get_production_summary():
     """
     Get a summary of production data.
