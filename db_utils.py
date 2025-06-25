@@ -54,22 +54,27 @@ def parse_date(date_str: str) -> str:
     in the correct format for the database.
 
     Returns:
-        - "YYYY-MM-DD" for PostgreSQL
-        - "DD-MM-YYYY" for SQLite
+        Date string in the `YYYY-MM-DD` format for both PostgreSQL and SQLite.
     """
-    # Explicitly specify DD-MM-YYYY format as the preferred format
-    parsed = dateparser.parse(date_str, date_formats=['%d-%m-%Y', '%d/%m/%Y'], settings={'PREFER_DAY_OF_MONTH': 'first'})
+    # Explicitly specify DD-MM-YYYY format as the preferred input format, but
+    # allow dateparser to handle natural language as well.
+    parsed = dateparser.parse(
+        date_str,
+        date_formats=["%d-%m-%Y", "%d/%m/%Y"],
+        settings={"PREFER_DAY_OF_MONTH": "first"},
+    )
     if not parsed:
         raise ValueError(f"No se pudo interpretar la fecha: {date_str}")
 
-    return parsed.strftime("%Y-%m-%d") if IS_RAILWAY else parsed.strftime("%d-%m-%Y")
+    # Always return ISO format regardless of the database backend
+    return parsed.strftime("%Y-%m-%d")
 
 def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Get daily supply chain data from the database.
     
     Args:
-        date: Optional date string in DD-MM-YYYY format. If provided, only data for that date is returned.
+        date: Optional date string in `YYYY-MM-DD` format. If provided, only data for that date is returned.
         
     Returns:
         List of dictionaries containing the daily data.
@@ -121,7 +126,7 @@ def update_production_plan(date: str, production_plan: int) -> str:
     Update the production plan for a specific date and recalculate inventory.
     
     Args:
-        date: Date string in DD-MM-YYYY format.
+        date: Date string in `YYYY-MM-DD` format.
         production_plan: New production plan value.
         
     Returns:
@@ -174,7 +179,7 @@ def update_demand(date: str, demand: int) -> str:
     Update the demand for a specific date and recalculate inventory.
     
     Args:
-        date: Date string in DD-MM-YYYY format.
+        date: Date string in `YYYY-MM-DD` format.
         demand: New demand value.
         
     Returns:
@@ -387,12 +392,8 @@ def generate_future_data(start_date: str, days: int) -> str:
             # First parse the date to get it in the right format
             formatted_start_date = parse_date(start_date)
             
-            # Then convert it to a datetime object for date arithmetic
-            # The format depends on whether we're using PostgreSQL or SQLite
-            if IS_RAILWAY:
-                start_date_obj = datetime.strptime(formatted_start_date, "%Y-%m-%d")
-            else:
-                start_date_obj = datetime.strptime(formatted_start_date, "%d-%m-%Y")
+            # Convert it to a datetime object for date arithmetic
+            start_date_obj = datetime.strptime(formatted_start_date, "%Y-%m-%d")
             
             # Generate random data
             dates = [start_date_obj + timedelta(days=i) for i in range(days)]
@@ -403,13 +404,8 @@ def generate_future_data(start_date: str, days: int) -> str:
             # Calculate inventory as production_plan - demand
             inventory = [int(production_plan[i]) - int(demand[i]) for i in range(days)]
             
-            # Format dates for database
-            if IS_RAILWAY:
-                # PostgreSQL espera el formato YYYY-MM-DD
-                formatted_dates = [date.strftime("%Y-%m-%d") for date in dates]
-            else:
-                # SQLite puede manejar el formato DD-MM-YYYY
-                formatted_dates = [date.strftime("%d-%m-%Y") for date in dates]
+            # Format dates for database (always YYYY-MM-DD)
+            formatted_dates = [date.strftime("%Y-%m-%d") for date in dates]
             print(f"Fechas generadas: {formatted_dates}")
             
             # Connect to database
@@ -937,5 +933,45 @@ def ensure_forecast_column():
                 conn.commit()
     except Exception as e:
         print(f"Error al verificar/añadir la columna forecast: {str(e)}")
+    finally:
+        conn.close()
+
+
+def convert_sqlite_date_format():
+    """Convert existing `daily_data.date` values from `DD-MM-YYYY` to `YYYY-MM-DD`.
+
+    This helper should be executed once after upgrading to the unified date
+    format. It has no effect when running against PostgreSQL.
+    """
+    if IS_RAILWAY:
+        print("Date conversion is not required for PostgreSQL.")
+        return
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT date FROM daily_data")
+        dates = [row[0] for row in cursor.fetchall()]
+
+        for old_date in dates:
+            try:
+                # Skip if the date is already in ISO format
+                datetime.strptime(old_date, "%Y-%m-%d")
+                continue
+            except ValueError:
+                pass
+
+            try:
+                new_date = datetime.strptime(old_date, "%d-%m-%Y").strftime("%Y-%m-%d")
+                cursor.execute(
+                    "UPDATE daily_data SET date = ? WHERE date = ?",
+                    (new_date, old_date),
+                )
+            except Exception as e:
+                print(f"No se pudo convertir la fecha {old_date}: {e}")
+
+        conn.commit()
+        print("Conversión de fechas completada.")
     finally:
         conn.close()

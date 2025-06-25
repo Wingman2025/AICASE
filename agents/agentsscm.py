@@ -29,9 +29,8 @@ def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
     # Si se proporciona una fecha, se procesa y se formatea correctamente
     if date:
         try:
-            # Esta función se encarga de interpretar la fecha y devolver el formato adecuado:
-            # Para PostgreSQL (Railway) será "YYYY-MM-DD"
-            # Para SQLite, "DD-MM-YYYY"
+            # Esta función se encarga de interpretar la fecha y devolverla en el
+            # formato ISO "YYYY-MM-DD" para ambos motores de base de datos
             formatted_date = db_utils.parse_date(date)
         except ValueError as e:
             return {"error": str(e)}
@@ -239,7 +238,7 @@ data_generator = Agent(
     
     When asked to generate data:
       - Confirm the start date and number of days.
-      - Use the DD-MM-YYYY format for dates (e.g., "18-04-2025").
+      - Use the YYYY-MM-DD format for dates (e.g., "2025-04-18").
       - Explain what data was generated and how it can be used.
     
     When asked to delete all data:
