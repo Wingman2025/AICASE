@@ -125,6 +125,7 @@ The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io
 
 All functions rely on `db_utils.parse_date()` to normalise natural-language dates
 into the `YYYY-MM-DD` format for both SQLite and PostgreSQL.
+Month-only phrases such as `"July 2024"` are interpreted as the first day of that month.
 
 The database access layer automatically switches between SQLite and PostgreSQL based on the presence of the `DATABASE_URL` environment variable and adapts SQL placeholders (`?` vs `%s`) accordingly.
 
