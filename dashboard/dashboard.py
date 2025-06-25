@@ -394,8 +394,6 @@ def render_content(tab, n_clicks):
             data = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
 
-            # Convert to DataFrame for easier plotting
-            df = pd.DataFrame(data, columns=columns)
 
             # Fetch summary metrics
             prod_summary = db_utils.get_production_summary()
@@ -426,18 +424,8 @@ def render_content(tab, n_clicks):
                 )
             ], className="mb-4")
 
-            # Create timeline figure for demand, production plan and inventory/forecast
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df['date'], y=df['demand'], mode='lines+markers', name='Demand'))
-            fig.add_trace(go.Scatter(x=df['date'], y=df['production_plan'], mode='lines+markers', name='Production Plan'))
-            if 'inventory' in df.columns:
-                fig.add_trace(go.Scatter(x=df['date'], y=df['inventory'], mode='lines+markers', name='Inventory'))
-            elif 'forecast' in df.columns:
-                fig.add_trace(go.Scatter(x=df['date'], y=df['forecast'], mode='lines+markers', name='Forecast'))
-
             return html.Div([
                 metrics,
-                dcc.Graph(figure=fig),
                 html.H3('Daily Data', style={'textAlign': 'center', 'color': '#4CAF50'}),
                 html.Table([
                     html.Thead(html.Tr([html.Th(col, style={'padding': '10px', 'border': '1px solid #ddd', 'backgroundColor': '#f2f2f2'}) for col in columns])),
