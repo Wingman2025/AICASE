@@ -12,6 +12,7 @@ import db_utils
 import forecast_utils
 from agents import Agent, Runner, function_tool
 from typing import Optional, List, Dict, Any
+from datetime import datetime, timedelta
 
 @function_tool
 def get_daily_data(date: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -99,13 +100,26 @@ def get_demand_summary():
 
 @function_tool
 def calculate_demand_forecast(method: str = "exponential_smoothing", periods: int = 7) -> Dict[str, Any]:
-    """Calculate demand forecast using historical data."""
+    """Calculate demand forecast using historical data and persist to the database."""
     if method == "moving_average":
         forecast = forecast_utils.moving_average_forecast(periods=periods)
     else:
         forecast = forecast_utils.exponential_smoothing_forecast(periods=periods)
+
     if not forecast:
         return {"error": "No demand data available for forecasting"}
+
+    # Determine the start date based on the latest existing record
+    data = db_utils.get_daily_data()
+    if data:
+        last_date_str = max(row["date"] for row in data)
+        last_date = datetime.strptime(last_date_str, "%Y-%m-%d")
+        next_date = last_date + timedelta(days=1)
+
+        for value in forecast:
+            db_utils.update_forecast(next_date.strftime("%Y-%m-%d"), int(value))
+            next_date += timedelta(days=1)
+
     return {"forecast": forecast}
 
 @function_tool
