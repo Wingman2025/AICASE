@@ -429,7 +429,11 @@ def register_callbacks(app):
                 return chat_history, "", conversation_data, ""
 
             # Pass the entire conversation history to the agent
-            conversation_history = [{"role": msg["role"], "content": msg["content"]} for msg in messages[:-1]]  # Exclude the placeholder
+            conversation_history = [
+                {"role": msg["role"], "content": msg["content"]}
+                for msg in messages[:-1]
+                if msg.get("role") != "debug"
+            ]  # Exclude placeholder and debug messages
 
             if debug:
 
