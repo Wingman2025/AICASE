@@ -144,3 +144,8 @@ def test_clear_forecast_range():
 
     assert f11 == 10
     assert f12 is None and f13 is None
+
+
+def test_forecast_from_date_before_dataset():
+    forecast = forecast_utils.forecast_from_date("2023-12-25", periods=2)
+    assert len(forecast) > 0
