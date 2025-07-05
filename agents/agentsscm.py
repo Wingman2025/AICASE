@@ -2,6 +2,7 @@ import asyncio
 import sys
 import os
 import uuid
+import inspect
 
 # Add the parent directory to the Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -302,18 +303,31 @@ async def orchestrate_forecast_to_plan(question: str, debug: bool = False):
         )
         return plan_result.final_output
 
-    forecast_stream = await Runner.run_streamed(
-        demand_planner, input=[{"role": "user", "content": question}]
-    )
+    run_streamed = Runner.run_streamed
+    if inspect.iscoroutinefunction(run_streamed):
+        forecast_stream = await run_streamed(
+            demand_planner, input=[{"role": "user", "content": question}]
+        )
+    else:
+        forecast_stream = run_streamed(
+            demand_planner, input=[{"role": "user", "content": question}]
+        )
     debug_events = []
     async for ev in forecast_stream.stream_events():
         debug_events.append(ev)
 
-    plan_stream = await Runner.run_streamed(
-        production_planner,
-        input=forecast_stream.to_input_list()
-        + [{"role": "user", "content": "Create the production plan using that forecast."}],
-    )
+    if inspect.iscoroutinefunction(run_streamed):
+        plan_stream = await run_streamed(
+            production_planner,
+            input=forecast_stream.to_input_list()
+            + [{"role": "user", "content": "Create the production plan using that forecast."}],
+        )
+    else:
+        plan_stream = run_streamed(
+            production_planner,
+            input=forecast_stream.to_input_list()
+            + [{"role": "user", "content": "Create the production plan using that forecast."}],
+        )
     async for ev in plan_stream.stream_events():
         debug_events.append(ev)
 
