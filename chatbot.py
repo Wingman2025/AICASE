@@ -400,9 +400,21 @@ def register_callbacks(app):
             
             if user_input.lower().startswith('/forecast-plan:'):
                 question = user_input.split(':', 1)[1].strip()
-                result_text = asyncio.run(orchestrate_forecast_to_plan(question))
+
+                if debug:
+                    result_text, debug_events = loop.run_until_complete(
+                        orchestrate_forecast_to_plan(question, debug=True)
+                    )
+                else:
+                    result_text = loop.run_until_complete(
+                        orchestrate_forecast_to_plan(question, debug=False)
+                    )
+               
                 messages[-1]["content"] = result_text
                 messages[-1]["time"] = datetime.now().strftime("%H:%M")
+                if debug:
+                    messages.extend(handle_debug_events(debug_events))
+
                 if user_authenticated:
                     db_utils.save_message_with_user(user_id, session_id, "assistant", result_text)
                 else:

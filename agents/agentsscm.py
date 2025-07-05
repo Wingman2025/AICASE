@@ -284,17 +284,40 @@ triage_agent = Agent(
 )
 
 
-async def orchestrate_forecast_to_plan(question: str) -> str:
-    """Run the demand planner followed by the production planner."""
-    forecast_result = await Runner.run(
+async def orchestrate_forecast_to_plan(question: str, debug: bool = False):
+    """Run the demand planner followed by the production planner.
+
+    If ``debug`` is ``True`` both planners are executed using ``Runner.run_streamed``
+    and the streaming events are returned alongside the final answer.
+    """
+
+    if not debug:
+        forecast_result = await Runner.run(
+            demand_planner, input=[{"role": "user", "content": question}]
+        )
+        plan_result = await Runner.run(
+            production_planner,
+            input=forecast_result.to_input_list()
+            + [{"role": "user", "content": "Create the production plan using that forecast."}],
+        )
+        return plan_result.final_output
+
+    forecast_stream = await Runner.run_streamed(
         demand_planner, input=[{"role": "user", "content": question}]
     )
-    plan_result = await Runner.run(
+    debug_events = []
+    async for ev in forecast_stream.stream_events():
+        debug_events.append(ev)
+
+    plan_stream = await Runner.run_streamed(
         production_planner,
-        input=forecast_result.to_input_list()
+        input=forecast_stream.to_input_list()
         + [{"role": "user", "content": "Create the production plan using that forecast."}],
     )
-    return plan_result.final_output
+    async for ev in plan_stream.stream_events():
+        debug_events.append(ev)
+
+    return plan_stream.final_output, debug_events
 
 async def main():
     # Crear la tabla de historial de conversaciones si no existe
