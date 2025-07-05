@@ -274,6 +274,35 @@ def clear_forecast_range(start_date: str, end_date: Optional[str] = None) -> str
     conn = get_connection()
     try:
         cursor = conn.cursor()
+        # Check if any forecast values exist for the given range
+        if iso_end:
+            if IS_RAILWAY:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM daily_data WHERE date >= %s AND date <= %s AND forecast IS NOT NULL",
+                    (iso_start, iso_end),
+                )
+            else:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM daily_data WHERE date >= ? AND date <= ? AND forecast IS NOT NULL",
+                    (iso_start, iso_end),
+                )
+        else:
+            if IS_RAILWAY:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM daily_data WHERE date >= %s AND forecast IS NOT NULL",
+                    (iso_start,),
+                )
+            else:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM daily_data WHERE date >= ? AND forecast IS NOT NULL",
+                    (iso_start,),
+                )
+
+        count = cursor.fetchone()[0]
+        if count == 0:
+            return "No forecast values found in the specified date range."
+
+        # Clear the forecast values only if records were found
         if iso_end:
             if IS_RAILWAY:
                 cursor.execute(

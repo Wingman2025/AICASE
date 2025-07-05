@@ -146,6 +146,20 @@ def test_clear_forecast_range():
     assert f12 is None and f13 is None
 
 
+def test_clear_forecast_range_no_records():
+    """Return informative message when no forecast data exists for range."""
+
+    import json, asyncio
+    result = asyncio.run(
+        agentsscm.clear_forecast_range.on_invoke_tool(
+            None,
+            json.dumps({"start_date": "2025-01-01", "end_date": "2025-01-05"}),
+        )
+    )
+
+    assert result["message"] == "No forecast values found in the specified date range."
+
+
 def test_forecast_from_date_before_dataset():
     forecast = forecast_utils.forecast_from_date("2023-12-25", periods=2)
     assert len(forecast) > 0
