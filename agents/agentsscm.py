@@ -204,6 +204,13 @@ def clear_all_forecast() -> Dict[str, Any]:
     msg = db_utils.clear_all_forecast()
     return {"message": msg}
 
+
+@function_tool
+def clear_forecast_range(start_date: str, end_date: Optional[str] = None) -> Dict[str, Any]:
+    """Clear forecast values on or after ``start_date`` (optionally until ``end_date``)."""
+    msg = db_utils.clear_forecast_range(start_date, end_date)
+    return {"message": msg}
+
 @function_tool
 def generate_future_data(start_date: str, days: int) -> Dict[str, Any]:
     """
@@ -274,7 +281,15 @@ demand_planner = Agent(
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
-    tools=[get_daily_data, update_demand, increase_all_demand, clear_all_forecast, get_demand_summary, calculate_demand_forecast]
+    tools=[
+        get_daily_data,
+        update_demand,
+        increase_all_demand,
+        clear_all_forecast,
+        clear_forecast_range,
+        get_demand_summary,
+        calculate_demand_forecast,
+    ]
 )
 
 data_generator = Agent(
