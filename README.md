@@ -57,7 +57,7 @@ The application relies on the following core technologies:
 
 The system uses multiple specialized AI agents:
 
-- **Triage Agent**: Routes queries to the appropriate specialist agent
+- **Triage Agent**: Routes queries to the appropriate specialist agent and never answers directly
 - **Production Planner**: Handles production planning and optimization
 - **Demand Planner**: Analyzes demand patterns and forecasts
 
@@ -66,8 +66,9 @@ The system uses multiple specialized AI agents:
 The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/agents/) and is organised as a small **multi-agent system**.
 
 1. **Triage Agent (`triage_agent`)**
-   • Role: entry-point router.  
-   • Model: `gpt-4o`.  
+   • Role: entry-point router.
+   • This agent never answers user questions or modifies data itself—it only routes requests to specialists.
+   • Model: `gpt-4o`.
    • Handoffs: `production_planner`, `demand_planner`, `data_generator`.  
    • Routing rules:  
      – Production / inventory ⇒ `production_planner`  

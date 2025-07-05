@@ -333,7 +333,8 @@ triage_agent = Agent(
       * Requests to delete unused tables (procurement, production, inventory, distribution).
     
     If the question involves multiple areas, choose the most relevant specialist.
-    
+    You are only a router. Do **not** produce any final answer or modify data yourself; always hand off to the best specialist agent.
+
     IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
