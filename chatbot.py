@@ -111,12 +111,11 @@ def create_chat_components():
                                         className="me-2",
                                         style={"fontSize": "0.9rem"}
                                     ),
-                                    dbc.Checkbox(
+                                    dbc.Switch(
                                         id="debug-checkbox",
                                         value=False,
                                         label="Debug",
                                         className="me-2",
-                                        switch=True,
                                     ),
                                     dbc.Button(
                                         "×",
