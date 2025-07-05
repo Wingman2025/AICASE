@@ -81,3 +81,66 @@ def test_calculate_demand_forecast_updates_future_rows(monkeypatch):
 
     int_expected = [int(x) for x in expected]
     assert [f1, f2, f3] == int_expected
+
+
+def test_calculate_demand_forecast_with_start_date(monkeypatch):
+    original_get_daily_data = db_utils.get_daily_data
+
+    def limited_get_daily_data(date=None):
+        data = original_get_daily_data(date)
+        if date is None:
+            return [row for row in data if row['date'] <= '2024-01-10']
+        return data
+
+    monkeypatch.setattr(db_utils, "get_daily_data", limited_get_daily_data)
+
+    expected = forecast_utils.forecast_from_date("2024-01-11", periods=2)
+
+    import json, asyncio
+    result = asyncio.run(
+        agentsscm.calculate_demand_forecast.on_invoke_tool(
+            None,
+            json.dumps({"periods": 2, "start_date": "2024-01-11"}),
+        )
+    )
+
+    assert result["forecast"] == expected
+
+    conn = db_utils.get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT forecast FROM daily_data WHERE date = ?", ('2024-01-11',))
+    f1 = cur.fetchone()[0]
+    cur.execute("SELECT forecast FROM daily_data WHERE date = ?", ('2024-01-12',))
+    f2 = cur.fetchone()[0]
+    conn.close()
+
+    int_expected = [int(x) for x in expected]
+    assert [f1, f2] == int_expected
+
+
+def test_clear_forecast_range():
+    # Set specific forecast values so we know what should be cleared
+    db_utils.update_forecast("2024-01-11", 10)
+    db_utils.update_forecast("2024-01-12", 20)
+    db_utils.update_forecast("2024-01-13", 30)
+
+    import json, asyncio
+    asyncio.run(
+        agentsscm.clear_forecast_range.on_invoke_tool(
+            None,
+            json.dumps({"start_date": "2024-01-12", "end_date": "2024-01-13"}),
+        )
+    )
+
+    conn = db_utils.get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT forecast FROM daily_data WHERE date = ?", ("2024-01-11",))
+    f11 = cur.fetchone()[0]
+    cur.execute("SELECT forecast FROM daily_data WHERE date = ?", ("2024-01-12",))
+    f12 = cur.fetchone()[0]
+    cur.execute("SELECT forecast FROM daily_data WHERE date = ?", ("2024-01-13",))
+    f13 = cur.fetchone()[0]
+    conn.close()
+
+    assert f11 == 10
+    assert f12 is None and f13 is None

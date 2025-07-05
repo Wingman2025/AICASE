@@ -99,22 +99,44 @@ def get_demand_summary():
     return db_utils.get_demand_summary()
 
 @function_tool
-def calculate_demand_forecast(method: str = "exponential_smoothing", periods: int = 7) -> Dict[str, Any]:
-    """Calculate demand forecast using historical data and persist to the database."""
-    if method == "moving_average":
-        forecast = forecast_utils.moving_average_forecast(periods=periods)
+def calculate_demand_forecast(
+    method: str = "exponential_smoothing",
+    periods: int = 7,
+    start_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Calculate demand forecast and persist it to the database.
+
+    If ``start_date`` is provided, the forecast begins on that date using
+    historical data up to and including that day. Otherwise the forecast starts
+    after the latest date present in the database.
+    """
+
+    if start_date:
+        try:
+            formatted_start = db_utils.parse_date(start_date)
+        except ValueError as e:
+            return {"error": str(e)}
+        forecast = forecast_utils.forecast_from_date(
+            formatted_start, periods, method=method
+        )
     else:
-        forecast = forecast_utils.exponential_smoothing_forecast(periods=periods)
+        if method == "moving_average":
+            forecast = forecast_utils.moving_average_forecast(periods=periods)
+        else:
+            forecast = forecast_utils.exponential_smoothing_forecast(periods=periods)
 
     if not forecast:
         return {"error": "No demand data available for forecasting"}
 
-    # Determine the start date based on the latest existing record
+    # Determine the start date for persisting the forecast
     data = db_utils.get_daily_data()
     if data:
-        last_date_str = max(row["date"] for row in data)
-        last_date = datetime.strptime(last_date_str, "%Y-%m-%d")
-        next_date = last_date + timedelta(days=1)
+        if start_date:
+            next_date = datetime.strptime(formatted_start, "%Y-%m-%d")
+        else:
+            last_date_str = max(row["date"] for row in data)
+            last_date = datetime.strptime(last_date_str, "%Y-%m-%d")
+            next_date = last_date + timedelta(days=1)
 
         for value in forecast:
             db_utils.update_forecast(next_date.strftime("%Y-%m-%d"), int(value))
@@ -180,6 +202,13 @@ def propose_production_plan_for_stockouts():
 def clear_all_forecast() -> Dict[str, Any]:
     """Clear the forecast column for every row without deleting any data."""
     msg = db_utils.clear_all_forecast()
+    return {"message": msg}
+
+
+@function_tool
+def clear_forecast_range(start_date: str, end_date: Optional[str] = None) -> Dict[str, Any]:
+    """Clear forecast values on or after ``start_date`` (optionally until ``end_date``)."""
+    msg = db_utils.clear_forecast_range(start_date, end_date)
     return {"message": msg}
 
 @function_tool
@@ -253,7 +282,15 @@ demand_planner = Agent(
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
-    tools=[get_daily_data, update_demand, increase_all_demand, clear_all_forecast, get_demand_summary, calculate_demand_forecast]
+    tools=[
+        get_daily_data,
+        update_demand,
+        increase_all_demand,
+        clear_all_forecast,
+        clear_forecast_range,
+        get_demand_summary,
+        calculate_demand_forecast,
+    ]
 )
 
 data_generator = Agent(

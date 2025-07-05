@@ -113,6 +113,7 @@ The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io
 | `generate_future_data(start_date, days)` | Populates future records with random realistic values. |
 | `increase_all_demand(offset)` | Adds an offset to demand across all dates and recalculates inventory. |
 | `clear_all_forecast()` | Sets all forecast values to NULL without deleting any rows. |
+| `calculate_demand_forecast(method?, periods?, start_date?)` | Compute and store a forecast. If `start_date` is omitted the forecast begins after the last known date. |
 | `delete_all_data()` | Hard reset of the database. |
 
 #### Conversation & Memory
@@ -146,6 +147,7 @@ The application uses SQLite to store supply chain data. The database includes:
 - Triage routing extended so forecast-clearing requests reach the Demand Planner.
 - Unified date handling: all functions produce `YYYY-MM-DD` regardless of backend.
 - Inventory recalculates cumulatively whenever production or demand is changed.
+- Forecast functions can now start from a custom date via `calculate_demand_forecast(start_date=...)`.
 
 ## License
 
