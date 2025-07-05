@@ -211,38 +211,6 @@ def clear_forecast_range(start_date: str, end_date: Optional[str] = None) -> Dic
     msg = db_utils.clear_forecast_range(start_date, end_date)
     return {"message": msg}
 
-@function_tool
-def generate_future_data(start_date: str, days: int) -> Dict[str, Any]:
-    """
-    Generate random data for future dates and save to database.
-    
-    Args:
-        start_date: A date string expressed in natural language or in a common format
-                   (e.g., "today", "03-04-2025", "2025-04-03").
-        days: Number of days to generate data for (integer).
-        
-    Returns:
-        A message indicating success or failure.
-    """
-    # Convertir la fecha al formato adecuado para la base de datos usando parse_date
-    try:
-        formatted_start_date = db_utils.parse_date(start_date)
-    except ValueError as e:
-        return {"error": str(e)}
-        
-    # Llamar a la función de generación en db_utils
-    result_message = db_utils.generate_future_data(formatted_start_date, days)
-    return {"message": result_message}
-
-@function_tool
-def delete_all_data():
-    """
-    Elimina todos los datos de la base de datos para comenzar desde cero.
-    
-    Returns:
-        Un mensaje indicando el éxito o error de la operación.
-    """
-    return db_utils.delete_all_data()
 
 # Create specialist agents
 production_planner = Agent(
@@ -293,33 +261,6 @@ demand_planner = Agent(
     ]
 )
 
-data_generator = Agent(
-    name="data_generator",
-    instructions="""
-    You are a data generation specialist for a supply chain management system.
-    Your responsibilities include:
-      1. Generating random but realistic data for future dates.
-      2. Ensuring data consistency and integrity.
-      3. Eliminating all data when the user wants to start from scratch.
-    
-    When asked to generate data:
-      - Confirm the start date and number of days.
-      - Use the YYYY-MM-DD format for dates (e.g., "2025-04-18").
-      - Explain what data was generated and how it can be used.
-    
-    When asked to delete all data:
-      - Confirm with the user that they really want to delete all data.
-      - Warn them that this action cannot be undone.
-      - After deletion, suggest generating new data.
-    
-    Be concise and helpful.
-    
-    IMPORTANT: You have access to the conversation history, so you can refer to previous messages
-    and maintain context throughout the conversation.
-    """,
-    model="gpt-4o",
-    tools=[generate_future_data, get_daily_data, delete_all_data]
-)
 
 triage_agent = Agent(
     name="triage_agent",
@@ -327,10 +268,6 @@ triage_agent = Agent(
     You determine which specialist agent to use based on the user's question:
     - Route to production_planner for questions about production plans, updating production plan, inventory levels.
     - Route to demand_planner for questions about demand data, demand generation, demand analysis, or clearing forecast values.
-    - Route to data_generator for:
-      * Requests to generate new data.
-      * Requests to delete all data and start from scratch.
-      * Requests to delete unused tables (procurement, production, inventory, distribution).
     
     If the question involves multiple areas, choose the most relevant specialist.
     You are only a router. Do **not** produce any final answer or modify data yourself; always hand off to the best specialist agent.
@@ -338,7 +275,7 @@ triage_agent = Agent(
     IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
-    handoffs=[production_planner, demand_planner, data_generator]
+    handoffs=[production_planner, demand_planner]
 )
 
 
