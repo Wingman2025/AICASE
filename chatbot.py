@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import uuid
+import inspect
 from datetime import datetime
 
 import dash
@@ -222,7 +223,11 @@ def create_chat_components():
 
 async def run_agent_debug(history):
     """Run the triage agent in streaming mode and collect events."""
-    result = await Runner.run_streamed(triage_agent, input=history)
+    run_streamed = Runner.run_streamed
+    if inspect.iscoroutinefunction(run_streamed):
+        result = await run_streamed(triage_agent, input=history)
+    else:
+        result = run_streamed(triage_agent, input=history)
     events = []
     async for event in result.stream_events():
         events.append(event)
@@ -402,11 +407,11 @@ def register_callbacks(app):
                 question = user_input.split(':', 1)[1].strip()
 
                 if debug:
-                    result_text, debug_events = loop.run_until_complete(
+                    result_text, debug_events = asyncio.run(
                         orchestrate_forecast_to_plan(question, debug=True)
                     )
                 else:
-                    result_text = loop.run_until_complete(
+                    result_text = asyncio.run(
                         orchestrate_forecast_to_plan(question, debug=False)
                     )
                
