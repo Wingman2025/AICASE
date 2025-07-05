@@ -70,11 +70,10 @@ The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io
    • Role: entry-point router.
    • This agent never answers user questions or modifies data itself—it only routes requests to specialists.
    • Model: `gpt-4o`.
-   • Handoffs: `production_planner`, `demand_planner`, `data_generator`.  
+   • Handoffs: `production_planner`, `demand_planner`.
    • Routing rules:  
      – Production / inventory ⇒ `production_planner`  
-     – Demand analysis / updating ⇒ `demand_planner`  
-     – Data generation / purge ⇒ `data_generator`.
+     – Demand analysis / updating ⇒ `demand_planner`
 
 2. **Production Planner (`production_planner`)**
    • Tools:
@@ -93,12 +92,6 @@ The AI layer is built on top of the [OpenAI Agents SDK](https://openai.github.io
      – `get_demand_summary`  
   • Responsibilities: monitor and update demand values and forecast demand trends. Prior to any forecast or data update, the agent explains the calculation method and parameters and asks you to confirm before proceeding.
 
-4. **Data Generator (`data_generator`)**
-   • Tools:  
-     – `generate_future_data`  
-     – `get_daily_data`  
-     – `delete_all_data`  
-   • Responsibilities: create realistic synthetic data for future horizons and purge the database on request.
 
 #### Shared Function Tools
 
