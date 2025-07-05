@@ -26,6 +26,11 @@ sys.path.append(agents_dir)
 import agentsscm
 from agentsscm import triage_agent, orchestrate_forecast_to_plan
 from agents import Runner
+from agents.stream_events import (
+    RawResponsesStreamEvent,
+    RunItemStreamEvent,
+    AgentUpdatedStreamEvent,
+)
 import db_utils
 
 # Estilos globales que pueden ser modificados desde el dashboard
@@ -111,6 +116,13 @@ def create_chat_components():
                                         className="me-2",
                                         style={"fontSize": "0.9rem"}
                                     ),
+                                    dbc.Checkbox(
+                                        id="debug-checkbox",
+                                        value=False,
+                                        label="Debug",
+                                        className="me-2",
+                                        switch=True,
+                                    ),
                                     dbc.Button(
                                         "×",
                                         id="close-chat",
@@ -192,6 +204,12 @@ def create_chat_components():
         id="session-store",
         data={"session_id": str(uuid.uuid4())}
     )
+
+    # Store for debug state
+    debug_store = dcc.Store(
+        id="debug-store",
+        data=False
+    )
     
     # Include Font Awesome for icons
     font_awesome = html.Link(
@@ -199,7 +217,46 @@ def create_chat_components():
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
     )
     
-    return chat_button, chat_modal, chat_store, session_store, font_awesome
+
+    return chat_button, chat_modal, chat_store, session_store, debug_store, font_awesome
+
+
+async def run_agent_debug(history):
+    """Run the triage agent in streaming mode and collect events."""
+    result = await Runner.run_streamed(triage_agent, input=history)
+    events = []
+    async for event in result.stream_events():
+        events.append(event)
+    return result.final_output, events
+
+
+def handle_debug_events(events):
+    """Convert streaming events to debug chat messages."""
+    debug_messages = []
+    for ev in events:
+        if isinstance(ev, RawResponsesStreamEvent):
+            delta = getattr(ev.data, "delta", None)
+            text = getattr(delta, "content", None) or getattr(ev.data, "text", None)
+            content = f"📝 Modelo envía: {text}" if text else "📝 Evento de modelo"
+        elif isinstance(ev, RunItemStreamEvent):
+            if ev.name == "tool_called":
+                tool_name = getattr(ev.item, "raw_item", getattr(ev.item, "tool", None))
+                content = f"▶️ Llamada a herramienta {getattr(tool_name, 'name', tool_name)}"
+            elif ev.name == "tool_output":
+                output = getattr(ev.item, "output", None)
+                content = f"✅ Resultado herramienta: {output}"
+            else:
+                content = f"• Evento {ev.name}"
+        elif isinstance(ev, AgentUpdatedStreamEvent):
+            content = f"🤖 Nuevo agente: {getattr(ev.new_agent, 'name', '')}"
+        else:
+            content = f"• Evento {type(ev).__name__}"
+        debug_messages.append({
+            "role": "debug",
+            "content": content,
+            "time": datetime.now().strftime("%H:%M"),
+        })
+    return debug_messages
 
 def register_callbacks(app):
     """Register the chat-related callbacks with the provided Dash app."""
@@ -207,6 +264,10 @@ def register_callbacks(app):
     # Asegurar que la tabla de historial de conversaciones existe
     db_utils.create_conversation_history_table()
     db_utils.create_users_table()
+
+    @app.callback(Output("debug-store", "data"), Input("debug-checkbox", "value"), prevent_initial_call=True)
+    def store_debug(value):
+        return bool(value)
     
     @app.callback(
         Output("chat-modal", "style"),
@@ -240,10 +301,11 @@ def register_callbacks(app):
          Input("chat-modal", "style"),  # Añadido para cargar el historial cuando se abre el chat
          Input("session-store", "data")],  # Añadido para cargar el historial de la sesión seleccionada
         [State("user-input", "value"),
-         State("conversation-store", "data")],
+         State("conversation-store", "data"),
+         State("debug-store", "data")],
         prevent_initial_call=True
     )
-    def process_user_message(n_clicks, n_submit, modal_style, session_store, user_input, conversation_data):
+    def process_user_message(n_clicks, n_submit, modal_style, session_store, user_input, conversation_data, debug_flag):
         """Process the user's message and update the chat history."""
         ctx = dash.callback_context
         trigger = ctx.triggered[0]["prop_id"].split(".")[0]
@@ -274,7 +336,8 @@ def register_callbacks(app):
                 conversation_data = {
                     "messages": messages,
                     "session_id": session_id,
-                    "user_id": user_id
+                    "user_id": user_id,
+                    "debug": debug_flag if debug_flag is not None else conversation_data.get("debug", False),
                 }
             else:
                 # Si no está autenticado, usar un ID de sesión temporal
@@ -284,7 +347,8 @@ def register_callbacks(app):
                 # Actualizar el store con el ID de sesión
                 conversation_data = {
                     "messages": messages,
-                    "session_id": session_id
+                    "session_id": session_id,
+                    "debug": debug_flag if debug_flag is not None else conversation_data.get("debug", False),
                 }
             
             # Actualizar la UI
@@ -297,6 +361,12 @@ def register_callbacks(app):
         # Obtener información de la sesión y usuario
         session_id = conversation_data.get("session_id", str(uuid.uuid4()))
         user_id = conversation_data.get("user_id") if user_authenticated else None
+
+        # Debug flag management
+        debug = conversation_data.get("debug", False)
+        if debug_flag is not None:
+            debug = bool(debug_flag)
+        conversation_data["debug"] = debug
         
         # Get current time for timestamp
         timestamp = datetime.now().strftime("%H:%M")
@@ -329,13 +399,9 @@ def register_callbacks(app):
             }
             messages.append(assistant_message)
             
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
             if user_input.lower().startswith('/forecast-plan:'):
                 question = user_input.split(':', 1)[1].strip()
-                result_text = loop.run_until_complete(orchestrate_forecast_to_plan(question))
-                loop.close()
+                result_text = asyncio.run(orchestrate_forecast_to_plan(question))
                 messages[-1]["content"] = result_text
                 messages[-1]["time"] = datetime.now().strftime("%H:%M")
                 if user_authenticated:
@@ -344,25 +410,31 @@ def register_callbacks(app):
                     db_utils.save_message(session_id, "assistant", result_text)
                 chat_history = messages_to_components(messages)
                 if user_authenticated:
-                    conversation_data = {"messages": messages, "session_id": session_id, "user_id": user_id}
+                    conversation_data = {"messages": messages, "session_id": session_id, "user_id": user_id, "debug": debug}
                 else:
-                    conversation_data = {"messages": messages, "session_id": session_id}
+                    conversation_data = {"messages": messages, "session_id": session_id, "debug": debug}
                 return chat_history, "", conversation_data, ""
 
             # Pass the entire conversation history to the agent
             conversation_history = [{"role": msg["role"], "content": msg["content"]} for msg in messages[:-1]]  # Exclude the placeholder
-            result = loop.run_until_complete(Runner.run(triage_agent, input=conversation_history))
-            loop.close()
-            
-            # Update the placeholder with the actual response
-            messages[-1]["content"] = result.final_output
-            messages[-1]["time"] = datetime.now().strftime("%H:%M")
-            
+
+            if debug:
+                result_text, debug_events = asyncio.run(run_agent_debug(conversation_history))
+                assistant_output = result_text
+                messages[-1]["content"] = result_text
+                messages[-1]["time"] = datetime.now().strftime("%H:%M")
+                messages.extend(handle_debug_events(debug_events))
+            else:
+                result = asyncio.run(Runner.run(triage_agent, input=conversation_history))
+                assistant_output = result.final_output
+                messages[-1]["content"] = result.final_output
+                messages[-1]["time"] = datetime.now().strftime("%H:%M")
+
             # Guardar la respuesta del asistente en la base de datos
             if user_authenticated:
-                db_utils.save_message_with_user(user_id, session_id, "assistant", result.final_output)
+                db_utils.save_message_with_user(user_id, session_id, "assistant", assistant_output)
             else:
-                db_utils.save_message(session_id, "assistant", result.final_output)
+                db_utils.save_message(session_id, "assistant", assistant_output)
             
             # Update the UI with both messages
             chat_history = messages_to_components(messages)
@@ -372,12 +444,14 @@ def register_callbacks(app):
                 conversation_data = {
                     "messages": messages,
                     "session_id": session_id,
-                    "user_id": user_id
+                    "user_id": user_id,
+                    "debug": debug,
                 }
             else:
                 conversation_data = {
                     "messages": messages,
-                    "session_id": session_id
+                    "session_id": session_id,
+                    "debug": debug,
                 }
             
             return chat_history, "", conversation_data, ""
@@ -403,12 +477,14 @@ def register_callbacks(app):
                 conversation_data = {
                     "messages": messages,
                     "session_id": session_id,
-                    "user_id": user_id
+                    "user_id": user_id,
+                    "debug": debug,
                 }
             else:
                 conversation_data = {
                     "messages": messages,
-                    "session_id": session_id
+                    "session_id": session_id,
+                    "debug": debug,
                 }
             
             return chat_history, "", conversation_data, ""
@@ -434,6 +510,8 @@ def register_callbacks(app):
         conversation_data["messages"] = []
         return [], conversation_data
 
+    return process_user_message, clear_chat_history
+
 def messages_to_components(messages):
     """Convert message objects to Dash components."""
     components = []
@@ -441,13 +519,19 @@ def messages_to_components(messages):
     for message in messages:
         if message["role"] == "user":
             component = html.Div([
-                html.Div(message["content"], 
-                         className="d-inline-block", 
+                html.Div(message["content"],
+                         className="d-inline-block",
                          style=USER_MESSAGE_STYLE),
-                html.Div(message["time"], 
-                         className="text-end", 
+                html.Div(message["time"],
+                         className="text-end",
                          style=TIMESTAMP_STYLE)
             ], className="d-flex flex-column align-items-end mb-3")
+        elif message["role"] == "debug":
+            component = html.Div(
+                message["content"],
+                className="text-muted fst-italic",
+                style={"fontSize": "0.75rem"},
+            )
         else:
             # Procesar el texto para convertir markdown a HTML
             content = process_markdown(message["content"])

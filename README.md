@@ -13,6 +13,7 @@ This project implements a supply chain management system with AI-powered assista
   - Demand forecasting
   - Inventory management
 - Database integration for storing and retrieving supply chain data
+- Optional **Debug** mode streams each execution step in the chat
 
 ## Project Structure
 
@@ -53,6 +54,7 @@ The application relies on the following core technologies:
 3. Use the chat interface to interact with the AI assistant
 4. When requesting forecasts or data updates, the agent summarises the chosen calculation method and parameters. If you didn't specify details like the forecasting method or number of periods, the assistant will ask follow-up questions to gather that information and then request your confirmation before executing.
 5. To generate a forecast and production plan in one step, type `/forecast-plan: <your question>` in the chat.
+6. Enable the **Debug** checkbox in the chat window to stream step-by-step details of the agent's execution.
 
 ## AI Agents
 
