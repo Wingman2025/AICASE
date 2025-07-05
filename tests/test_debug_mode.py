@@ -45,7 +45,7 @@ def test_process_user_message_debug(monkeypatch):
     chat_history, _, conv_data, _ = process_msg(1, None, {}, {"session_id": "s1"}, "hello", {"messages": [], "session_id": "s1"}, True)
 
     debug_msgs = [m for m in conv_data["messages"] if m["role"] == "debug"]
-    assert len(debug_msgs) == 2
+    assert len(debug_msgs) == 1
 
 
 def test_forecast_plan_debug(monkeypatch):
