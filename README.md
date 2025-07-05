@@ -51,7 +51,7 @@ The application relies on the following core technologies:
 1. Run `python dashboard/dashboard.py` to start the dashboard application.
 2. Access the dashboard in your web browser at [http://127.0.0.1:8050/](http://127.0.0.1:8050/)
 3. Use the chat interface to interact with the AI assistant
-4. When requesting forecasts or data updates, the agent will summarise the chosen calculation method and parameters, then ask for your confirmation before executing.
+4. When requesting forecasts or data updates, the agent summarises the chosen calculation method and parameters. If you didn't specify details like the forecasting method or number of periods, the assistant will ask follow-up questions to gather that information and then request your confirmation before executing.
 5. To generate a forecast and production plan in one step, type `/forecast-plan: <your question>` in the chat.
 
 ## AI Agents
