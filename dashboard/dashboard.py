@@ -163,7 +163,7 @@ if RAILWAY_DEPLOYMENT and 'RAILWAY_STATIC_URL' in os.environ:
         print(f"Error al configurar WhiteNoise: {str(e)}")
 
 # Get chat components from the chatbot module
-chat_button, chat_modal, chat_store, session_store, font_awesome = chatbot.create_chat_components()
+chat_button, chat_modal, chat_store, session_store, debug_store, font_awesome = chatbot.create_chat_components()
 
 # Set global styles for message components in chatbot module
 chatbot.USER_MESSAGE_STYLE = {'textAlign': 'left', 'margin': '5px'}
@@ -341,6 +341,7 @@ app.layout = html.Div([
     chat_modal,
     chat_store,
     session_store,
+    debug_store,
     font_awesome,
     
     # Hidden store to store user data
