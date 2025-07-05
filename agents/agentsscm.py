@@ -341,6 +341,19 @@ triage_agent = Agent(
     handoffs=[production_planner, demand_planner, data_generator]
 )
 
+
+async def orchestrate_forecast_to_plan(question: str) -> str:
+    """Run the demand planner followed by the production planner."""
+    forecast_result = await Runner.run(
+        demand_planner, input=[{"role": "user", "content": question}]
+    )
+    plan_result = await Runner.run(
+        production_planner,
+        input=forecast_result.to_input_list()
+        + [{"role": "user", "content": "Create the production plan using that forecast."}],
+    )
+    return plan_result.final_output
+
 async def main():
     # Crear la tabla de historial de conversaciones si no existe
     db_utils.create_conversation_history_table()
@@ -368,13 +381,21 @@ async def main():
         if user_input.lower() in ['exit', 'bye', 'quit']:
             print("Goodbye!")
             break
-            
+
         if user_input.lower() == 'clear history':
             # Limpiar el historial de conversación
             db_utils.clear_conversation_history(session_id)
             agent_messages = []
             result = None
             print("Historial de conversación eliminado.")
+            continue
+
+        if user_input.lower().startswith('forecast-plan:'):
+            question = user_input.split(':', 1)[1].strip()
+            answer = await orchestrate_forecast_to_plan(question)
+            db_utils.save_message(session_id, "assistant", answer)
+            print("Assistant:", answer)
+            result = None
             continue
         
         # Guardar el mensaje del usuario en la base de datos

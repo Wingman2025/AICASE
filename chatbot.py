@@ -24,7 +24,7 @@ sys.path.append(agents_dir)
 # Import the modules using the correct path
 
 import agentsscm
-from agentsscm import triage_agent
+from agentsscm import triage_agent, orchestrate_forecast_to_plan
 from agents import Runner
 import db_utils
 
@@ -329,10 +329,26 @@ def register_callbacks(app):
             }
             messages.append(assistant_message)
             
-            # Run the agent in a separate thread to not block the UI
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
+            if user_input.lower().startswith('/forecast-plan:'):
+                question = user_input.split(':', 1)[1].strip()
+                result_text = loop.run_until_complete(orchestrate_forecast_to_plan(question))
+                loop.close()
+                messages[-1]["content"] = result_text
+                messages[-1]["time"] = datetime.now().strftime("%H:%M")
+                if user_authenticated:
+                    db_utils.save_message_with_user(user_id, session_id, "assistant", result_text)
+                else:
+                    db_utils.save_message(session_id, "assistant", result_text)
+                chat_history = messages_to_components(messages)
+                if user_authenticated:
+                    conversation_data = {"messages": messages, "session_id": session_id, "user_id": user_id}
+                else:
+                    conversation_data = {"messages": messages, "session_id": session_id}
+                return chat_history, "", conversation_data, ""
+
             # Pass the entire conversation history to the agent
             conversation_history = [{"role": msg["role"], "content": msg["content"]} for msg in messages[:-1]]  # Exclude the placeholder
             result = loop.run_until_complete(Runner.run(triage_agent, input=conversation_history))

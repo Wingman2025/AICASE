@@ -52,6 +52,7 @@ The application relies on the following core technologies:
 2. Access the dashboard in your web browser at [http://127.0.0.1:8050/](http://127.0.0.1:8050/)
 3. Use the chat interface to interact with the AI assistant
 4. When requesting forecasts or data updates, the agent will summarise the chosen calculation method and parameters, then ask for your confirmation before executing.
+5. To generate a forecast and production plan in one step, type `/forecast-plan: <your question>` in the chat.
 
 ## AI Agents
 
@@ -149,6 +150,8 @@ The application uses SQLite to store supply chain data. The database includes:
 - Unified date handling: all functions produce `YYYY-MM-DD` regardless of backend.
 - Inventory recalculates cumulatively whenever production or demand is changed.
 - Forecast functions can now start from a custom date via `calculate_demand_forecast(start_date=...)`.
+- Added `/forecast-plan:` command to run a forecast with the Demand Planner and
+  immediately hand off to the Production Planner to create the production plan.
 
 ## License
 
