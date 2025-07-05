@@ -58,7 +58,12 @@ def forecast_from_date(
     except ValueError:
         return []
 
-    history = [row["demand"] for row in data if row["date"] <= iso_date]
+    earliest_date = min(row["date"] for row in data)
+    if iso_date < earliest_date:
+        iso_date = earliest_date
+        history = [row["demand"] for row in data]
+    else:
+        history = [row["demand"] for row in data if row["date"] <= iso_date]
     if not history:
         return []
     series = pd.Series(history)
