@@ -221,16 +221,13 @@ def create_chat_components():
     return chat_button, chat_modal, chat_store, session_store, debug_store, font_awesome
 
 
-async def run_agent_debug(history):
-    """Run the triage agent in streaming mode and collect events."""
-    run_streamed = Runner.run_streamed
-    if inspect.iscoroutinefunction(run_streamed):
-        result = await run_streamed(triage_agent, input=history)
-    else:
-        result = run_streamed(triage_agent, input=history)
-    events = []
-    async for event in result.stream_events():
-        events.append(event)
+async def run_agent_debug(history, on_event=None):
+    """Run the triage agent in streaming mode collecting debug events."""
+    from streaming_utils import run_streamed_collect
+
+    result, events = await run_streamed_collect(
+        triage_agent, input=history, on_event=on_event
+    )
     return result.final_output, events
 
 
@@ -436,7 +433,12 @@ def register_callbacks(app):
 
             if debug:
 
-                result_text, debug_events = asyncio.run(run_agent_debug(conversation_history))
+                debug_events = []
+                result_text, _ = asyncio.run(
+                    run_agent_debug(
+                        conversation_history, on_event=lambda ev: debug_events.append(ev)
+                    )
+                )
                 assistant_output = result_text
                 messages[-1]["content"] = result_text
                 messages[-1]["time"] = datetime.now().strftime("%H:%M")
