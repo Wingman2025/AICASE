@@ -233,6 +233,7 @@ def handle_debug_events(events):
     """Convert streaming events to debug chat messages."""
     debug_messages = []
     for ev in events:
+
         if isinstance(ev, RawResponsesStreamEvent):
             delta = getattr(ev.data, "delta", None)
             text = getattr(delta, "content", None) or getattr(ev.data, "text", None)
@@ -253,7 +254,6 @@ def handle_debug_events(events):
         debug_messages.append({
             "role": "debug",
             "content": content,
-            "time": datetime.now().strftime("%H:%M"),
         })
     return debug_messages
 
@@ -418,12 +418,14 @@ def register_callbacks(app):
             conversation_history = [{"role": msg["role"], "content": msg["content"]} for msg in messages[:-1]]  # Exclude the placeholder
 
             if debug:
+
                 result_text, debug_events = asyncio.run(run_agent_debug(conversation_history))
                 assistant_output = result_text
                 messages[-1]["content"] = result_text
                 messages[-1]["time"] = datetime.now().strftime("%H:%M")
                 messages.extend(handle_debug_events(debug_events))
             else:
+
                 result = asyncio.run(Runner.run(triage_agent, input=conversation_history))
                 assistant_output = result.final_output
                 messages[-1]["content"] = result.final_output
