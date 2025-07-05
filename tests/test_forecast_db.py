@@ -116,3 +116,31 @@ def test_calculate_demand_forecast_with_start_date(monkeypatch):
 
     int_expected = [int(x) for x in expected]
     assert [f1, f2] == int_expected
+
+
+def test_clear_forecast_range():
+    # Set specific forecast values so we know what should be cleared
+    db_utils.update_forecast("2024-01-11", 10)
+    db_utils.update_forecast("2024-01-12", 20)
+    db_utils.update_forecast("2024-01-13", 30)
+
+    import json, asyncio
+    asyncio.run(
+        agentsscm.clear_forecast_range.on_invoke_tool(
+            None,
+            json.dumps({"start_date": "2024-01-12", "end_date": "2024-01-13"}),
+        )
+    )
+
+    conn = db_utils.get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT forecast FROM daily_data WHERE date = ?", ("2024-01-11",))
+    f11 = cur.fetchone()[0]
+    cur.execute("SELECT forecast FROM daily_data WHERE date = ?", ("2024-01-12",))
+    f12 = cur.fetchone()[0]
+    cur.execute("SELECT forecast FROM daily_data WHERE date = ?", ("2024-01-13",))
+    f13 = cur.fetchone()[0]
+    conn.close()
+
+    assert f11 == 10
+    assert f12 is None and f13 is None

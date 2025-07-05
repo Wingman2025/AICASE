@@ -256,6 +256,60 @@ def clear_all_forecast() -> str:
         conn.close()
 
 
+def clear_forecast_range(start_date: str, end_date: Optional[str] = None) -> str:
+    """Clear forecast values for a given date range.
+
+    ``start_date`` and ``end_date`` may be provided in any parsable format. All
+    rows with a ``date`` greater than or equal to ``start_date`` and, if
+    ``end_date`` is given, less than or equal to ``end_date`` will have their
+    ``forecast`` column set to ``NULL``.
+    """
+
+    try:
+        iso_start = parse_date(start_date)
+        iso_end = parse_date(end_date) if end_date else None
+    except ValueError as e:
+        return f"Error processing date: {e}"
+
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        if iso_end:
+            if IS_RAILWAY:
+                cursor.execute(
+                    "UPDATE daily_data SET forecast = NULL WHERE date >= %s AND date <= %s",
+                    (iso_start, iso_end),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE daily_data SET forecast = NULL WHERE date >= ? AND date <= ?",
+                    (iso_start, iso_end),
+                )
+        else:
+            if IS_RAILWAY:
+                cursor.execute(
+                    "UPDATE daily_data SET forecast = NULL WHERE date >= %s",
+                    (iso_start,),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE daily_data SET forecast = NULL WHERE date >= ?",
+                    (iso_start,),
+                )
+
+        conn.commit()
+        if cursor.rowcount == 0:
+            return "No rows matched the specified date range."
+        if iso_end:
+            return f"Forecast cleared from {iso_start} to {iso_end}."
+        return f"Forecast cleared on or after {iso_start}."
+    except Exception as e:
+        conn.rollback()
+        return f"Error clearing forecast values: {str(e)}"
+    finally:
+        conn.close()
+
+
 def get_production_summary():
     """
     Get a summary of production data.
