@@ -26,6 +26,11 @@ sys.path.append(agents_dir)
 import agentsscm
 from agentsscm import triage_agent, orchestrate_forecast_to_plan
 from agents import Runner
+from agents.stream_events import (
+    RawResponsesStreamEvent,
+    RunItemStreamEvent,
+    AgentUpdatedStreamEvent,
+)
 import db_utils
 
 # Estilos globales que pueden ser modificados desde el dashboard
@@ -229,10 +234,26 @@ def handle_debug_events(events):
     """Convert streaming events to debug chat messages."""
     debug_messages = []
     for ev in events:
-        text = getattr(ev, "name", str(getattr(ev, "type", "")))
+        if isinstance(ev, RawResponsesStreamEvent):
+            delta = getattr(ev.data, "delta", None)
+            text = getattr(delta, "content", None) or getattr(ev.data, "text", None)
+            content = f"📝 Modelo envía: {text}" if text else "📝 Evento de modelo"
+        elif isinstance(ev, RunItemStreamEvent):
+            if ev.name == "tool_called":
+                tool_name = getattr(ev.item, "raw_item", getattr(ev.item, "tool", None))
+                content = f"▶️ Llamada a herramienta {getattr(tool_name, 'name', tool_name)}"
+            elif ev.name == "tool_output":
+                output = getattr(ev.item, "output", None)
+                content = f"✅ Resultado herramienta: {output}"
+            else:
+                content = f"• Evento {ev.name}"
+        elif isinstance(ev, AgentUpdatedStreamEvent):
+            content = f"🤖 Nuevo agente: {getattr(ev.new_agent, 'name', '')}"
+        else:
+            content = f"• Evento {type(ev).__name__}"
         debug_messages.append({
             "role": "debug",
-            "content": f"{text}",
+            "content": content,
             "time": datetime.now().strftime("%H:%M"),
         })
     return debug_messages
@@ -378,13 +399,9 @@ def register_callbacks(app):
             }
             messages.append(assistant_message)
             
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
             if user_input.lower().startswith('/forecast-plan:'):
                 question = user_input.split(':', 1)[1].strip()
-                result_text = loop.run_until_complete(orchestrate_forecast_to_plan(question))
-                loop.close()
+                result_text = asyncio.run(orchestrate_forecast_to_plan(question))
                 messages[-1]["content"] = result_text
                 messages[-1]["time"] = datetime.now().strftime("%H:%M")
                 if user_authenticated:
@@ -402,15 +419,13 @@ def register_callbacks(app):
             conversation_history = [{"role": msg["role"], "content": msg["content"]} for msg in messages[:-1]]  # Exclude the placeholder
 
             if debug:
-                result_text, debug_events = loop.run_until_complete(run_agent_debug(conversation_history))
-                loop.close()
+                result_text, debug_events = asyncio.run(run_agent_debug(conversation_history))
                 assistant_output = result_text
                 messages[-1]["content"] = result_text
                 messages[-1]["time"] = datetime.now().strftime("%H:%M")
                 messages.extend(handle_debug_events(debug_events))
             else:
-                result = loop.run_until_complete(Runner.run(triage_agent, input=conversation_history))
-                loop.close()
+                result = asyncio.run(Runner.run(triage_agent, input=conversation_history))
                 assistant_output = result.final_output
                 messages[-1]["content"] = result.final_output
                 messages[-1]["time"] = datetime.now().strftime("%H:%M")
