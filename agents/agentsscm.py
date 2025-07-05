@@ -12,7 +12,7 @@ sys.path.append(parent_dir)
 import db_utils
 import forecast_utils
 from agents import Agent, Runner, function_tool
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 from datetime import datetime, timedelta
 
 @function_tool
@@ -285,7 +285,7 @@ triage_agent = Agent(
 )
 
 
-async def orchestrate_forecast_to_plan(question: str, debug: bool = False):
+async def orchestrate_forecast_to_plan(question: str, debug: bool = False, on_event: Callable[[Any], None] | None = None):
     """Run the demand planner followed by the production planner.
 
     If ``debug`` is ``True`` both planners are executed using ``Runner.run_streamed``
@@ -303,35 +303,33 @@ async def orchestrate_forecast_to_plan(question: str, debug: bool = False):
         )
         return plan_result.final_output
 
-    run_streamed = Runner.run_streamed
-    if inspect.iscoroutinefunction(run_streamed):
-        forecast_stream = await run_streamed(
-            demand_planner, input=[{"role": "user", "content": question}]
-        )
-    else:
-        forecast_stream = run_streamed(
-            demand_planner, input=[{"role": "user", "content": question}]
-        )
+    from streaming_utils import run_streamed_collect
+
     debug_events = []
-    async for ev in forecast_stream.stream_events():
-        debug_events.append(ev)
 
-    if inspect.iscoroutinefunction(run_streamed):
-        plan_stream = await run_streamed(
-            production_planner,
-            input=forecast_stream.to_input_list()
-            + [{"role": "user", "content": "Create the production plan using that forecast."}],
-        )
-    else:
-        plan_stream = run_streamed(
-            production_planner,
-            input=forecast_stream.to_input_list()
-            + [{"role": "user", "content": "Create the production plan using that forecast."}],
-        )
-    async for ev in plan_stream.stream_events():
+    def handle_event(ev: Any) -> None:
         debug_events.append(ev)
+        if on_event:
+            try:
+                on_event(ev)
+            except Exception:
+                pass
 
-    return plan_stream.final_output, debug_events
+    forecast_result, forecast_events = await run_streamed_collect(
+        demand_planner,
+        input=[{"role": "user", "content": question}],
+        on_event=handle_event,
+    )
+
+    plan_result, plan_events = await run_streamed_collect(
+        production_planner,
+        input=forecast_result.to_input_list()
+        + [{"role": "user", "content": "Create the production plan using that forecast."}],
+        on_event=handle_event,
+    )
+    debug_events.extend(plan_events)
+
+    return plan_result.final_output, debug_events
 
 async def main():
     # Crear la tabla de historial de conversaciones si no existe
