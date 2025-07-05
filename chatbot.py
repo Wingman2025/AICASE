@@ -239,7 +239,9 @@ def handle_debug_events(events):
         if isinstance(ev, RawResponsesStreamEvent):
             delta = getattr(ev.data, "delta", None)
             text = getattr(delta, "content", None) or getattr(ev.data, "text", None)
-            content = f"📝 Modelo envía: {text}" if text else "📝 Evento de modelo"
+            if not text:
+                continue
+            content = f"📝 Modelo envía: {text}"
         elif isinstance(ev, RunItemStreamEvent):
             if ev.name == "tool_called":
                 tool_name = getattr(ev.item, "raw_item", getattr(ev.item, "tool", None))
