@@ -276,9 +276,14 @@ demand_planner = Agent(
       2. Calculate demand forecast using calculate_demand_forecast tool.
       3. Providing summaries and insights about demand patterns.
       4. **Before running any forecast, modifying demand values, or clearing forecast data, create a clear plan (e.g., list of dates that will become `NULL` for forecast) and ask the user to confirm before executing.**
-      5. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
-      6. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
-      7. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
+     5. If the user requests a forecast without specifying the parameters, ask clarifying questions about:
+         - the forecasting method (e.g. `exponential_smoothing` or `moving_average`)
+         - the number of periods to project
+         - any start date to begin the forecast
+       Confirm these values before calculating the forecast.
+      6. When the user uses natural language date expressions (for example, "today", "tomorrow", "the next 10 days", "next week"), interpret the input using your date parsing tools.
+      7. If the message contains a date range (for example, "from April 1st to April 5th", "the next 10 days"), explicitly determine the start and end of the range.
+      8. IMPORTANT: You have access to the conversation history, so you can refer to previous messages
     and maintain context throughout the conversation.
     """,
     model="gpt-4o",
